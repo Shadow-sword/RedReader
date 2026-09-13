@@ -57,7 +57,11 @@ excerpts, not previous model translations, to avoid propagating translation mist
 Long source text is split at whitespace when possible, at most 1,000 Unicode code
 points per chunk; subsequent chunks receive a short preceding source excerpt. All
 chunks must succeed before a result is displayed. Context excerpts are explicitly
-marked when shortened. More context helps with ambiguity, but accuracy and Markdown
+marked when shortened. Prompts follow the official HY-MT2 **Structured Data 2**
+context template: background information, a target-language translation instruction,
+then the source text. Chinese targets use its Chinese wording; other targets use
+its English wording. Requests without background use the official default translation
+template. Context can help with ambiguity, but accuracy and Markdown
 fidelity are not guaranteed. Linked articles, image OCR and video transcription are
 not included.
 
@@ -141,7 +145,7 @@ Device acceptance scenarios:
 - Replace/remove the model and translate again. Try a long input and verify
   all chunks are translated; failures must not expose partial output as success.
 
-Reference: [Tencent model instructions](https://github.com/Tencent-Hunyuan/Hy-MT2),
+Reference: [Tencent model instructions and prompt templates](https://github.com/Tencent-Hunyuan/Hy-MT2/blob/main/README_CN.md),
 [llama.cpp Android documentation](https://github.com/ggml-org/llama.cpp/blob/master/docs/android.md).
 
 ### Validation performed
@@ -182,3 +186,18 @@ Reference: [Tencent model instructions](https://github.com/Tencent-Hunyuan/Hy-MT
   output quality remains a limitation and is not improved merely by concurrency.
 - Physical-device throughput, sustained thermals, and 3/4-way memory pressure have
   not been benchmarked. Keep 1 as the default and evaluate 2 on the intended device.
+
+### Official context template validation
+
+- `./gradlew :compileDebugJavaWithJavac :pmd :Checkstyle --console=plain` passed
+  (the existing task dependencies also assembled the debug APK). No unit tests ran.
+- A temporary host JNI scenario called the production prompt builder and native
+  runtime with the actual Q4_K_M model: six inputs, three generations each, covering
+  short replies, photography context, negation/URLs, no background, Traditional
+  Chinese, and an English target. All 15 Chinese-target outputs were in Chinese;
+  the three English-target outputs were in English. URLs and negation were retained.
+- Output-quality acceptance did **not** fully pass: two of the 18 outputs echoed
+  `〖待翻译文本〗`. Manual inspection also found two translations of a train ticket
+  as an airline ticket. The official template alone does not guarantee clean or
+  accurate output. No output stripping or silent retry was added. This prompt change
+  has not been exercised on an Android device.
