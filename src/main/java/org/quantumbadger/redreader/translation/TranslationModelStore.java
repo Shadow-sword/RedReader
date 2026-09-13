@@ -26,6 +26,7 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InterruptedIOException;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 /** Model files are imported atomically and excluded from Android backups. */
 public final class TranslationModelStore {
@@ -34,6 +35,7 @@ public final class TranslationModelStore {
 	private final File directory;
 	private final File model;
 	private volatile long revision;
+	private final ReentrantReadWriteLock modelLock = new ReentrantReadWriteLock(true);
 
 	TranslationModelStore(final Context context) {
 		this.context = context.getApplicationContext();
@@ -41,11 +43,32 @@ public final class TranslationModelStore {
 		model = new File(directory, "model.gguf");
 	}
 
-	synchronized File requireModel() throws IOException {
+	File requireModel() throws IOException {
 		if(!model.isFile()) {
 			throw new IOException("Import a translation model in Settings first");
 		}
 		return model;
+	}
+
+	void acquireForInference() throws InterruptedIOException {
+		acquire(modelLock.readLock());
+	}
+
+	void releaseAfterInference() {
+		modelLock.readLock().unlock();
+	}
+
+	private static void acquire(final java.util.concurrent.locks.Lock lock)
+			throws InterruptedIOException {
+		try {
+			lock.lockInterruptibly();
+		} catch(final InterruptedException error) {
+			Thread.currentThread().interrupt();
+			final InterruptedIOException cancelled =
+					new InterruptedIOException("Model access cancelled");
+			cancelled.initCause(error);
+			throw cancelled;
+		}
 	}
 
 	public long getRevision() {
@@ -89,13 +112,16 @@ public final class TranslationModelStore {
 			if(temporary.length() <= 24) {
 				throw new IOException("The model file is incomplete");
 			}
-			// Inference also holds this monitor, so replacement cannot remove its model.
-			synchronized(this) {
+			// Concurrent readers finish before a model can be replaced.
+			acquire(modelLock.writeLock());
+			try {
 				checkCancellation();
 				if(!temporary.renameTo(model)) {
 					throw new IOException("Could not replace the translation model");
 				}
 				revision++;
+			} finally {
+				modelLock.writeLock().unlock();
 			}
 		} finally {
 			if(temporary.exists() && !temporary.delete()) {
@@ -104,11 +130,16 @@ public final class TranslationModelStore {
 		}
 	}
 
-	public synchronized void removeModel() throws IOException {
-		if(model.exists() && !model.delete()) {
-			throw new IOException("Could not remove the translation model");
+	public void removeModel() throws IOException {
+		acquire(modelLock.writeLock());
+		try {
+			if(model.exists() && !model.delete()) {
+				throw new IOException("Could not remove the translation model");
+			}
+			revision++;
+		} finally {
+			modelLock.writeLock().unlock();
 		}
-		revision++;
 	}
 
 	private static void checkCancellation() throws InterruptedIOException {

@@ -18,23 +18,37 @@
 package org.quantumbadger.redreader.translation;
 
 import android.content.Context;
+import android.content.SharedPreferences;
 import android.os.Handler;
 import android.os.Looper;
 
 import androidx.preference.PreferenceManager;
 
-/** Process-wide queue shared by post and comment translation dialogs. */
+/** Process-wide inference limit shared by individual and thread translation. */
 public final class LocalTranslation {
 
 	private static LocalTranslation instance;
 
 	private final TranslationModelStore models;
 	private final TranslationService service;
+	// SharedPreferences keeps only a weak reference to registered listeners.
+	@SuppressWarnings("PMD.SingularField")
+	private final SharedPreferences.OnSharedPreferenceChangeListener preferenceListener;
 
 	private LocalTranslation(final Context context) {
 		models = new TranslationModelStore(context);
 		final Handler main = new Handler(Looper.getMainLooper());
-		service = new TranslationService(new GgufTranslationProvider(models), main::post);
+		final SharedPreferences preferences =
+				PreferenceManager.getDefaultSharedPreferences(context);
+		service = new TranslationService(new GgufTranslationProvider(models,
+				() -> Math.max(1, 4 / getConcurrency(context))),
+				main::post, getConcurrency(context));
+		preferenceListener = (prefs, key) -> {
+			if("translation_concurrency".equals(key)) {
+				service.setConcurrency(getConcurrency(context));
+			}
+		};
+		preferences.registerOnSharedPreferenceChangeListener(preferenceListener);
 	}
 
 	public static synchronized LocalTranslation getInstance(final Context context) {
@@ -50,6 +64,16 @@ public final class LocalTranslation {
 
 	public TranslationService getService() {
 		return service;
+	}
+
+	public static int getConcurrency(final Context context) {
+		final String value = PreferenceManager.getDefaultSharedPreferences(context)
+				.getString("translation_concurrency", "1");
+		final int concurrency = Integer.parseInt(value);
+		if(concurrency < 1 || concurrency > 4) {
+			throw new IllegalArgumentException("Translation concurrency must be between 1 and 4");
+		}
+		return concurrency;
 	}
 
 	public static String getTargetLanguage(final Context context) {

@@ -21,8 +21,9 @@ import java.io.IOException;
 import java.util.function.BooleanSupplier;
 
 /**
- * Replaceable translation engine. Call translate and close on the same background
- * worker, never concurrently or on the UI thread. Implementations own model loading,
+ * Replaceable translation engine. translate may be called concurrently on background
+ * workers; implementations must isolate per-request mutable state. close is called
+ * only after all translation calls return. Implementations own model loading,
  * prompts, tokenization and decoding; no Reddit account or access token is required.
  */
 public interface TranslationProvider extends AutoCloseable {

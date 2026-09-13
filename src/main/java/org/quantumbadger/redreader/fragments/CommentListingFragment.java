@@ -122,8 +122,8 @@ public class CommentListingFragment extends RRFragment
 	private int mTranslationGeneration;
 	private int mTranslationDone;
 	private int mTranslationFailed;
-	private TranslationViewModel.Entry mTranslationEntry;
-	private Observer<TranslationViewModel.Entry> mTranslationObserver;
+	private final Map<TranslationViewModel.Entry, Observer<TranslationViewModel.Entry>>
+			mTranslationObservers = new HashMap<>();
 
 
 	private boolean mSelfTextVisible = true;
@@ -668,7 +668,7 @@ public class CommentListingFragment extends RRFragment
 		}
 
 		mUrlsToDownload.removeFirst();
-		if(mTranslateThread && mTranslationEntry == null) {
+		if(mTranslateThread) {
 			mTranslationHandler.post(this::nextThreadTranslation);
 		}
 
@@ -748,54 +748,33 @@ public class CommentListingFragment extends RRFragment
 		mTranslateThread = false;
 		mTranslationGeneration++;
 		mTranslationHandler.removeCallbacksAndMessages(null);
-		if(mTranslationEntry != null) {
-			mTranslationEntry.changes.removeObserver(mTranslationObserver);
-			TranslationViewModel.get(getActivity()).cancel(mTranslationEntry);
-			mTranslationEntry = null;
+		for(final Map.Entry<TranslationViewModel.Entry, Observer<TranslationViewModel.Entry>> active
+				: mTranslationObservers.entrySet()) {
+			active.getKey().changes.removeObserver(active.getValue());
+			TranslationViewModel.get(getActivity()).cancel(active.getKey());
 		}
+		mTranslationObservers.clear();
 		mTranslationStatus.setText(R.string.translation_cancelled);
 		getActivity().invalidateOptionsMenu();
 	}
 
 	private void nextThreadTranslation() {
-		if(!mTranslateThread || mTranslationEntry != null || mTranslationLoading) {
+		if(!mTranslateThread || mTranslationLoading) {
 			return;
 		}
 		mTranslationStatus.setVisibility(View.VISIBLE);
 		mTranslationStatus.setText(getActivity().getString(R.string.translation_thread_progress,
 				mTranslationDone, mTranslationFailed));
-		RedditCommentListItem next = null;
-		for(final RedditCommentListItem item : mTranslationItems) {
-			if(!item.isComment()) {
-				continue;
-			}
-			final RedditComment raw = item.asComment().getParsedComment().getRawComment();
-			final String key = RedditTranslation.commentKey(raw);
-			if(mTranslatedComments.add(key) && raw.getBody() != null
-					&& !raw.getBody().getDecoded().trim().isEmpty()
-					&& !"[deleted]".equals(raw.getBody().getDecoded())
-					&& !"[removed]".equals(raw.getBody().getDecoded())) {
-				next = item;
+		final int concurrency = LocalTranslation.getInstance(getContext())
+				.getService().getConcurrency();
+		while(mTranslationObservers.size() < concurrency) {
+			final RedditCommentListItem next = nextUntranslatedComment();
+			if(next == null) {
 				break;
 			}
+			startCommentTranslation(next);
 		}
-		if(next != null) {
-			final RedditComment raw = next.asComment().getParsedComment().getRawComment();
-			final String key = RedditTranslation.commentKey(raw);
-			mTranslationEntry = TranslationViewModel.get(getActivity()).translate(key,
-					raw.getBody().getDecoded(), RedditTranslation.context(mPost, next));
-			mTranslationObserver = entry -> {
-				if(!entry.busy) {
-					entry.changes.removeObserver(mTranslationObserver);
-					mTranslationEntry = null;
-					mTranslationDone++;
-					if(entry.error != null) {
-						mTranslationFailed++;
-					}
-					mTranslationHandler.post(this::nextThreadTranslation);
-				}
-			};
-			mTranslationEntry.changes.observeForever(mTranslationObserver);
+		if(!mTranslationObservers.isEmpty()) {
 			return;
 		}
 		// Existing initial requests may still be delivering later pages.
@@ -817,6 +796,42 @@ public class CommentListingFragment extends RRFragment
 		mTranslationStatus.setText(getActivity().getString(R.string.translation_thread_complete,
 				mTranslationDone, mTranslationFailed));
 		getActivity().invalidateOptionsMenu();
+	}
+
+	private RedditCommentListItem nextUntranslatedComment() {
+		for(final RedditCommentListItem item : mTranslationItems) {
+			if(!item.isComment()) {
+				continue;
+			}
+			final RedditComment raw = item.asComment().getParsedComment().getRawComment();
+			if(mTranslatedComments.add(RedditTranslation.commentKey(raw)) && raw.getBody() != null
+					&& !raw.getBody().getDecoded().trim().isEmpty()
+					&& !"[deleted]".equals(raw.getBody().getDecoded())
+					&& !"[removed]".equals(raw.getBody().getDecoded())) {
+				return item;
+			}
+		}
+		return null;
+	}
+
+	private void startCommentTranslation(final RedditCommentListItem item) {
+		final RedditComment raw = item.asComment().getParsedComment().getRawComment();
+		final TranslationViewModel.Entry entry = TranslationViewModel.get(getActivity()).translate(
+				RedditTranslation.commentKey(raw), raw.getBody().getDecoded(),
+				RedditTranslation.context(mPost, item));
+		final Observer<TranslationViewModel.Entry> observer = value -> {
+			if(!value.busy) {
+				value.changes.removeObserver(mTranslationObservers.remove(value));
+				mTranslationDone++;
+				if(value.error != null) {
+					mTranslationFailed++;
+				}
+				mTranslationHandler.post(this::nextThreadTranslation);
+			}
+		};
+		// observeForever may deliver an already-cached result synchronously.
+		mTranslationObservers.put(entry, observer);
+		entry.changes.observeForever(observer);
 	}
 
 	private void loadTranslationComments(final PostCommentListingURL url) {

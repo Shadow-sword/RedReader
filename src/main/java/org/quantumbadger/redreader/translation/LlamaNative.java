@@ -31,7 +31,8 @@ final class LlamaNative {
 
 	private LlamaNative() {}
 
-	static native byte[] generate(byte[] modelPath, byte[] prompt, Cancellation cancellation)
+	static native byte[] generate(
+			byte[] modelPath, byte[] prompt, Cancellation cancellation, int threads)
 			throws IOException;
 
 	@Keep

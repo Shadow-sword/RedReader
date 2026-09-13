@@ -23,15 +23,19 @@ import java.io.IOException;
 import java.io.InterruptedIOException;
 import java.nio.charset.StandardCharsets;
 import java.util.function.BooleanSupplier;
+import java.util.function.IntSupplier;
 
 /** HY-MT2 prompt adapter backed by the embedded llama.cpp runtime. */
 public final class GgufTranslationProvider implements TranslationProvider {
 
 	private final TranslationModelStore store;
-	private boolean closed;
+	private volatile boolean closed;
+	private final IntSupplier threadCount;
 
-	public GgufTranslationProvider(final TranslationModelStore store) {
+	public GgufTranslationProvider(
+			final TranslationModelStore store, final IntSupplier threadCount) {
 		this.store = store;
+		this.threadCount = threadCount;
 	}
 
 	@Override
@@ -60,13 +64,17 @@ public final class GgufTranslationProvider implements TranslationProvider {
 			case "es": language = "Spanish"; break;
 			default: throw new IOException("Unsupported target language");
 		}
-		synchronized(store) {
-			return translateChunks(request, language, isCancelled);
+		store.acquireForInference();
+		try {
+			return translateChunks(request, language, isCancelled, threadCount.getAsInt());
+		} finally {
+			store.releaseAfterInference();
 		}
 	}
 
 	private String translateChunks(final TranslationRequest request,
-			final String language, final BooleanSupplier isCancelled) throws IOException {
+			final String language, final BooleanSupplier isCancelled,
+			final int threads) throws IOException {
 		final StringBuilder translated = new StringBuilder();
 		final String text = request.getText();
 		for(int offset = 0; offset < text.length();) {
@@ -102,32 +110,27 @@ public final class GgufTranslationProvider implements TranslationProvider {
 				if(translated.length() > 0) {
 					translated.append("\n");
 				}
-				translated.append(generate(prompt, isCancelled));
+				translated.append(generate(prompt, isCancelled, threads));
 			}
 			offset = end;
 		}
 		return translated.toString();
 	}
 
-	private String generate(
-			final String prompt, final BooleanSupplier isCancelled) throws IOException {
-		// One model runs at a time; native resources are released on every exit path.
-		synchronized(store) {
-			final byte[] path = store.requireModel().getAbsolutePath()
-					.getBytes(StandardCharsets.UTF_8);
-			try {
-				final byte[] result = LlamaNative.generate(
-						path,
-						prompt.getBytes(StandardCharsets.UTF_8),
-						new LlamaNative.Cancellation(isCancelled));
-				final String translated = new String(result, StandardCharsets.UTF_8);
-				if(translated.trim().isEmpty()) {
-					throw new IOException("The model returned an empty translation");
-				}
-				return translated;
-			} catch(final UnsatisfiedLinkError error) {
-				throw new IOException("The local translation runtime is unavailable", error);
+	private String generate(final String prompt, final BooleanSupplier isCancelled,
+			final int threads) throws IOException {
+		final byte[] path = store.requireModel().getAbsolutePath().getBytes(StandardCharsets.UTF_8);
+		try {
+			final byte[] result = LlamaNative.generate(
+					path, prompt.getBytes(StandardCharsets.UTF_8),
+					new LlamaNative.Cancellation(isCancelled), threads);
+			final String translated = new String(result, StandardCharsets.UTF_8);
+			if(translated.trim().isEmpty()) {
+				throw new IOException("The model returned an empty translation");
 			}
+			return translated;
+		} catch(final UnsatisfiedLinkError error) {
+			throw new IOException("The local translation runtime is unavailable", error);
 		}
 	}
 

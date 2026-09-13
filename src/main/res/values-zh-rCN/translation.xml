@@ -23,4 +23,9 @@
 	<string name="translation_thread_loading">已处理 %1$d 条评论。正在加载更多回复…点击取消。</string>
 	<string name="translation_thread_complete">已完成可获取的评论：处理 %1$d 条，失败 %2$d 条。</string>
 	<string name="translation_thread_load_failed">未能加载全部回复，翻译已停止；已完成的译文会保留。</string>
+	<string name="translation_concurrency">翻译并发数</string>
+	<string name="translation_concurrency_description">最多同时翻译：%s。提高并发会增加内存占用，未必更快。降低并发时，正在运行的任务会正常完成。</string>
+	<string-array name="translation_concurrency_choices">
+		<item>1（串行，默认）</item><item>2</item><item>3</item><item>4</item>
+	</string-array>
 </resources>

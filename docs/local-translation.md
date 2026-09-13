@@ -19,7 +19,8 @@ comment text to a translation server. The original Reddit data remains unchanged
    below that comment. If you customized action menus, enable Translate under
    Settings → Menus. Original Markdown, links and Reddit actions remain intact.
 5. In a post's comment screen, open the toolbar menu and select **Translate entire
-   comment thread**. Comments are processed serially, including collapsed comments.
+   comment thread**. Comments are processed using the configured concurrency limit,
+   including collapsed comments.
    The app follows Reddit's available “more replies” links with its existing request
    mechanism, merges new replies into the thread, and continues translating them.
    Deleted/removed/empty comments and comments filtered out by Reddit or the app are
@@ -29,6 +30,26 @@ comment text to a translation server. The original Reddit data remains unchanged
    error; individual inference failures remain visible below their original comments.
    Retry the thread action to resume, reusing completed translations with matching inputs.
    Tap an individual comment's translating indicator to cancel that item.
+
+### Concurrent translations
+
+**Settings → Local translation → Concurrent translations** offers 1–4 simultaneous
+translations. The default is **1 (serial)**. The limit is shared across all individual
+post/comment requests and thread batches in the process. It changes without restarting
+the app; lowering it lets existing calls finish before the pool settles at the new
+limit. A batch picks up a higher limit at its next dispatch. Additional Reddit reply
+requests remain serial.
+
+For a stable setting, each inference uses at most `max(1, 4 / concurrency)` CPU
+threads, further capped by the native runtime's detected processor count. Existing
+calls keep their assigned thread count until they finish. Each request owns its model,
+context and sampler; mapped file pages may be shared by the OS, but inference caches
+and work buffers still consume additional memory. No automatic concurrency increase,
+cloud fallback or silent retry is performed.
+
+Start with 1; try 2 on a capable device and compare total time for the same uncached
+comments. More concurrency may increase memory use, heat and UI contention without
+improving throughput. Desktop/emulator results do not establish phone performance.
 
 Each comment includes bounded excerpts of the post title/body and up to three nearest
 ancestors, with author names and nearest-parent-first ordering. These are source-text
@@ -64,13 +85,15 @@ Post/comment action or thread queue → TranslationViewModel → TranslationServ
 - `TranslationRequest` carries original text, a BCP 47 target language tag and
   supporting discussion context.
 - `TranslationProvider` owns model-specific prompting, supported languages and
-  inference. Its blocking methods run on the service's background worker. It must
-  honor cancellation and report failures rather than fabricate a translation.
-- `TranslationService` serializes requests and delivers results on the supplied
-  callback executor. Cancelling an item suppresses late callbacks.
+  inference. Its translation calls may run concurrently on background workers; mutable
+  per-request state must be isolated. It must honor cancellation and report failures rather than fabricate a translation.
+- `TranslationService` bounds concurrent requests with a configurable worker pool and
+  delivers results on the supplied callback executor. Its provider closes only after
+  all running calls have returned. Cancelling an item suppresses late callbacks.
 - `TranslationViewModel` retains per-item state; `InlineTranslationView` observes
   only while attached and rebinds to the correct item when rows are recycled.
-- `CommentListingFragment` serializes batch translation and additional reply requests,
+- `CommentListingFragment` keeps up to the selected number of comment tasks in flight
+  and serializes additional reply requests,
   deduplicating comment IDs and restoring the existing parent chain.
 - `GgufTranslationProvider` supplies the HY-MT2 translation prompt. The runtime uses
   the GGUF chat template and the model's tokenizer. A different model may need a
@@ -79,11 +102,12 @@ Post/comment action or thread queue → TranslationViewModel → TranslationServ
   future engine can implement the same interface without changing Reddit or UI code.
 - `TranslationModelStore` imports files through Android's document picker. Import
   checks GGUF magic/version; full model compatibility is checked during inference.
-  Copy failure preserves the previous model. Replacement/removal waits for active
-  inference to finish. **Remove model** deletes the private copy, not the source file.
+  Copy failure preserves the previous model. Inferences hold shared read locks;
+  replacement/removal takes an exclusive write lock and waits for all readers. Lock
+  acquisition is interruptible, so cancelled waiting work does not block indefinitely. **Remove model** deletes the private copy, not the source file.
 
 The initial backend uses CPU inference, an 8,192-token context, at most 4,096 output
-tokens, and up to four CPU threads. It reserves room for the output and rejects an
+tokens, and the CPU thread budget described above. It reserves room for the output and rejects an
 oversized chunk/context explicitly. It does not silently truncate or switch to a cloud model.
 Native model, context and sampler memory are released after each chunk, including
 failure and cancellation. This favors bounded memory use over repeated-load latency.
@@ -108,6 +132,8 @@ Device acceptance scenarios:
   and verify original text, links and Reddit actions remain available.
 - Translate emoji/non-ASCII content and switch the target language.
 - Cancel while loading and while generating; recycle/collapse rows and rotate the screen.
+- Verify the default serial setting, two concurrent model readers, lowering the limit,
+  cancelling active/queued tasks, and replacing/removing a model during inference.
 - Translate an entire thread, load nested replies, stop/restart, and handle a download
   failure without reporting the thread as complete.
 - Import a non-GGUF file, cancel the document picker, and interrupt an import;
@@ -139,3 +165,20 @@ Reference: [Tencent model instructions](https://github.com/Tencent-Hunyuan/Hy-MT
 - Live Reddit pagination/network failures, the document picker, long-thread stress,
   rotation, and physical-device memory/performance still need acceptance checks.
   The local fixture does not establish completeness of Reddit's server responses.
+
+### Concurrency validation
+
+- `./gradlew :pmd :Checkstyle :lintDebug :assembleDebug --console=plain` passed;
+  Android Lint reported no errors or warnings. `git diff --check` and the APK's
+  16 KB zip alignment check also passed. No unit tests were written or run.
+- An Android instrumentation scenario used the actual Q4_K_M model and thread menu.
+  The unset preference selected 1; changing it to 2 produced two simultaneous model
+  read-lock holders and two completed native calls. Switching to 1 queued the second
+  request. Active/queued cancellation, interrupting an exclusive model-writer wait,
+  and draining native calls before service termination all passed.
+- A host JNI scenario also completed two real model calls concurrently. These checks
+  establish concurrency behavior, not phone throughput or translation quality. One
+  short contextual Android response echoed a prompt delimiter/source text; model
+  output quality remains a limitation and is not improved merely by concurrency.
+- Physical-device throughput, sustained thermals, and 3/4-way memory pressure have
+  not been benchmarked. Keep 1 as the default and evaluate 2 on the intended device.

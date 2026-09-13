@@ -33,4 +33,12 @@
 	<string name="translation_thread_complete">Available comments finished. Processed: %1$d; failed: %2$d.</string>
 	<string name="translation_thread_load_failed">Could not load all replies. Translation stopped; completed translations are retained.</string>
 	<item type="id" name="action_translate_thread"/>
+	<string name="translation_concurrency">Concurrent translations</string>
+	<string name="translation_concurrency_description">Maximum simultaneous translations: %s. Higher values use more memory and may not be faster. Running tasks finish normally when lowering the limit.</string>
+	<string-array name="translation_concurrency_choices">
+		<item>1 (serial, default)</item><item>2</item><item>3</item><item>4</item>
+	</string-array>
+	<string-array name="translation_concurrency_values" translatable="false">
+		<item>1</item><item>2</item><item>3</item><item>4</item>
+	</string-array>
 </resources>

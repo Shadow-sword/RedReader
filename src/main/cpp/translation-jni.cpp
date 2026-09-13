@@ -66,7 +66,7 @@ std::string bytes(JNIEnv *env, jbyteArray input) {
     return result;
 }
 
-std::string generate(const std::string &path, const std::string &prompt, Cancellation &cancel) {
+std::string generate(const std::string &path, const std::string &prompt, Cancellation &cancel, int threadCount) {
     static std::once_flag initialized;
     std::call_once(initialized, [] { llama_backend_init(); });
     cancel.check();
@@ -112,7 +112,8 @@ std::string generate(const std::string &path, const std::string &prompt, Cancell
     contextParams.n_ctx = contextSize;
     contextParams.n_batch = 256;
     contextParams.n_ubatch = 128;
-    const int threads = std::max(1u, std::min(4u, std::thread::hardware_concurrency()));
+    const int threads = std::max(1u, std::min(static_cast<unsigned>(threadCount),
+            std::thread::hardware_concurrency()));
     contextParams.n_threads = threads;
     contextParams.n_threads_batch = threads;
     contextParams.abort_callback = Cancellation::abort;
@@ -166,13 +167,14 @@ std::string generate(const std::string &path, const std::string &prompt, Cancell
 
 extern "C" JNIEXPORT jbyteArray JNICALL
 Java_org_quantumbadger_redreader_translation_LlamaNative_generate(
-        JNIEnv *env, jclass, jbyteArray modelPath, jbyteArray prompt, jobject signal) {
+        JNIEnv *env, jclass, jbyteArray modelPath, jbyteArray prompt, jobject signal, jint threads) {
     const char *errorClass = "java/io/IOException";
     std::string error;
 #ifdef RR_TRANSLATION_SUPPORTED
     try {
+        if (threads < 1 || threads > 4) throw std::runtime_error("Invalid inference thread count");
         Cancellation cancellation(env, signal);
-        const std::string result = generate(bytes(env, modelPath), bytes(env, prompt), cancellation);
+        const std::string result = generate(bytes(env, modelPath), bytes(env, prompt), cancellation, threads);
         auto output = env->NewByteArray(result.size());
         if (output) env->SetByteArrayRegion(output, 0, result.size(),
                 reinterpret_cast<const jbyte *>(result.data()));

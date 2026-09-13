@@ -24,13 +24,14 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executor;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
+import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.Future;
 import java.util.concurrent.FutureTask;
 import java.util.concurrent.atomic.AtomicBoolean;
 
-/** Serializes inference so multiple comments do not load/run models concurrently. */
+/** Bounds concurrent inference across all post and comment requests. */
 public final class TranslationService implements AutoCloseable {
 
 	public interface Callback {
@@ -42,14 +43,48 @@ public final class TranslationService implements AutoCloseable {
 
 	private final TranslationProvider provider;
 	private final Executor callbackExecutor;
-	private final ExecutorService worker = Executors.newSingleThreadExecutor();
+	private final ThreadPoolExecutor worker;
 	private final Set<Job> jobs = new HashSet<>();
 	private volatile boolean closed;
 
 	/** Supply the Android main-thread executor when callbacks update a view. */
-	public TranslationService(final TranslationProvider provider, final Executor callbackExecutor) {
+	public TranslationService(final TranslationProvider provider,
+			final Executor callbackExecutor, final int concurrency) {
 		this.provider = Objects.requireNonNull(provider);
 		this.callbackExecutor = Objects.requireNonNull(callbackExecutor);
+		validateConcurrency(concurrency);
+		worker = new ThreadPoolExecutor(concurrency, concurrency, 0, TimeUnit.MILLISECONDS,
+				new LinkedBlockingQueue<>()) {
+			@Override
+			protected void terminated() {
+				TranslationService.this.provider.close();
+			}
+		};
+	}
+
+	public int getConcurrency() {
+		return worker.getMaximumPoolSize();
+	}
+
+	/** Existing calls finish normally when reducing the limit. */
+	public synchronized void setConcurrency(final int concurrency) {
+		validateConcurrency(concurrency);
+		if(closed) {
+			throw new IllegalStateException("Translation service is closed");
+		}
+		if(concurrency > worker.getMaximumPoolSize()) {
+			worker.setMaximumPoolSize(concurrency);
+			worker.setCorePoolSize(concurrency);
+		} else {
+			worker.setCorePoolSize(concurrency);
+			worker.setMaximumPoolSize(concurrency);
+		}
+	}
+
+	private static void validateConcurrency(final int concurrency) {
+		if(concurrency < 1 || concurrency > 4) {
+			throw new IllegalArgumentException("Translation concurrency must be between 1 and 4");
+		}
 	}
 
 	/** Cancel the returned future when its requesting screen is dismissed. */
@@ -79,8 +114,7 @@ public final class TranslationService implements AutoCloseable {
 		for(final Job job : new ArrayList<>(jobs)) {
 			job.cancel(true);
 		}
-		// Release native resources only after the current inference has stopped.
-		worker.execute(provider::close);
+		// terminated() closes the provider only after every inference has returned.
 		worker.shutdown();
 	}
 
@@ -108,7 +142,9 @@ public final class TranslationService implements AutoCloseable {
 		@Override
 		public boolean cancel(final boolean mayInterruptIfRunning) {
 			cancellation.set(true);
-			return super.cancel(mayInterruptIfRunning);
+			final boolean cancelled = super.cancel(mayInterruptIfRunning);
+			worker.remove(this);
+			return cancelled;
 		}
 
 		@Override

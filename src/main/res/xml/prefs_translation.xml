@@ -15,6 +15,12 @@
 		android:entryValues="@array/translation_language_codes"
 		android:defaultValue="zh-Hans"
 		app:useSimpleSummaryProvider="true"/>
+	<ListPreference android:key="translation_concurrency"
+		android:title="@string/translation_concurrency"
+		android:summary="@string/translation_concurrency_description"
+		android:entries="@array/translation_concurrency_choices"
+		android:entryValues="@array/translation_concurrency_values"
+		android:defaultValue="1"/>
 	<Preference android:key="translation_remove"
 		android:title="@string/translation_remove"/>
 </PreferenceScreen>
