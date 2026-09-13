@@ -57,11 +57,14 @@ excerpts, not previous model translations, to avoid propagating translation mist
 Long source text is split at whitespace when possible, at most 1,000 Unicode code
 points per chunk; subsequent chunks receive a short preceding source excerpt. All
 chunks must succeed before a result is displayed. Context excerpts are explicitly
-marked when shortened. Prompts follow the official HY-MT2 **Structured Data 2**
-context template: background information, a target-language translation instruction,
-then the source text. Chinese targets use its Chinese wording; other targets use
-its English wording. Requests without background use the official default translation
-template. Context can help with ambiguity, but accuracy and Markdown
+marked when shortened. Prompts combine the official HY-MT2 **Structured Data 2**
+background section with its default translation-only instruction. An explicit rule
+limits background to understanding, forbidding its translation or restatement. Source
+text follows the translation instruction's colon directly; the separate source heading
+is omitted because the model echoed it during short-comment validation. Chinese
+targets use Chinese wording; other targets use English wording. Requests without
+background use the official default translation template. Context can help with
+ambiguity, but accuracy and Markdown
 fidelity are not guaranteed. Linked articles, image OCR and video transcription are
 not included.
 
@@ -201,3 +204,26 @@ Reference: [Tencent model instructions and prompt templates](https://github.com/
   as an airline ticket. The official template alone does not guarantee clean or
   accurate output. No output stripping or silent retry was added. This prompt change
   has not been exercised on an Android device.
+
+### Short-comment scope correction
+
+- Reproduced background-only output with the previous official context template:
+  `Exactly.`, `Why?`, and `Nice shot!` translated a photography post and its ancestors
+  instead of the requested comment. This is a P1 translation correctness issue.
+- The adjusted prompt preserves the same background excerpts, explicitly excludes
+  background from the output, and places source text directly after the translation-only
+  instruction. It does not shorten context based on comment length, strip generated
+  text, change sampling, or silently retry.
+- With the actual Q4_K_M model and production prompt builder/JNI on the host, eight
+  short comments were each generated three times. All 24 outputs translated the
+  requested comment without background or template headings. For example, `Exactly.`
+  became `没错。`, and `Why?` became `为什么？`. This is a bounded scenario result,
+  not a guarantee for every comment or model.
+- Another 18 real-model outputs covered longer comments, no context, URLs/negation,
+  Traditional Chinese, and an English target. Language, URL retention, and absence
+  of template echoes passed. Manual inspection still found loss of precision:
+  photography's `sharp` became a generic positive description rather than image
+  sharpness. Correct output scope does not guarantee full semantic accuracy.
+- `./gradlew :compileDebugJavaWithJavac :pmd :Checkstyle --console=plain` passed,
+  including the debug APK assembly required by the existing task dependencies.
+  No unit tests were written or run. Android-device validation remains outstanding.

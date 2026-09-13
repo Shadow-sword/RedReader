@@ -109,15 +109,16 @@ public final class GgufTranslationProvider implements TranslationProvider {
 		return translated.toString();
 	}
 
-	/** Official HY-MT2 default and context-aware (Structured Data 2) templates. */
+	/** Combines HY-MT2 background context with its translation-only instruction. */
 	static String buildPrompt(final String language, final String context, final String text) {
 		if("简体中文".equals(language) || "繁体中文".equals(language)) {
 			if(context.trim().isEmpty()) {
 				return "将以下文本翻译为" + language
 						+ "，注意只需要输出翻译后的结果，不要额外解释：\n" + text;
 			}
-			return "〖背景信息〗\n" + context + "\n请结合背景信息将以下文本翻译为"
-					+ language + "。\n〖待翻译文本〗\n" + text;
+			return "〖背景信息〗\n" + context + "\n背景信息仅供理解，不要翻译或复述背景信息。"
+					+ "\n请结合背景信息将以下文本翻译为" + language
+						+ "，注意只需要输出翻译后的结果，不要额外解释：\n" + text;
 		}
 		if(context.trim().isEmpty()) {
 			return "Translate the following text into " + language
@@ -125,9 +126,11 @@ public final class GgufTranslationProvider implements TranslationProvider {
 					+ " without any additional explanation:\n" + text;
 		}
 		return "[Background Information]\n" + context
+				+ "\nUse the background only for understanding; do not translate or restate it."
 				+ "\nPlease translate the following text into " + language
 				+ ", taking the provided background information into consideration."
-				+ "\n[Source Text]\n" + text;
+				+ " Note that you should only output the translated result"
+				+ " without any additional explanation:\n" + text;
 	}
 
 	private String generate(final String prompt, final BooleanSupplier isCancelled,
