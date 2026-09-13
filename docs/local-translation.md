@@ -13,16 +13,40 @@ comment text to a translation server. The original Reddit data remains unchanged
    for the downloaded file and its imported copy. Replacing a model temporarily
    requires room for both imported versions.
 3. Choose a target language. The initial default is Simplified Chinese.
-4. Open a post's action menu and select **Translate** to translate its title and
-   available self-text. Open a comment's action menu to translate that comment.
-   If you previously customized action menus, enable Translate under Settings → Menus.
-5. The dialog shows selectable original text and translated text separately. Close
-   it to cancel. Rotation cancels unfinished inference; tap Translate to restart.
+4. Open a post's action menu and select **Translate**. Its translated title appears
+   below the original title; its translated self-text appears below the original
+   body in the comment screen. A comment's **Translate** action appends its translation
+   below that comment. If you customized action menus, enable Translate under
+   Settings → Menus. Original Markdown, links and Reddit actions remain intact.
+5. In a post's comment screen, open the toolbar menu and select **Translate entire
+   comment thread**. Comments are processed serially, including collapsed comments.
+   The app follows Reddit's available “more replies” links with its existing request
+   mechanism, merges new replies into the thread, and continues translating them.
+   Deleted/removed/empty comments and comments filtered out by Reddit or the app are
+   not translated. This cannot recover content Reddit does not return.
+6. The inline progress row shows processed/failed counts. Tap it or use **Cancel
+   comment translation** to stop. A download failure stops the batch and reports an
+   error; individual inference failures remain visible below their original comments.
+   Retry the thread action to resume, reusing completed translations with matching inputs.
+   Tap an individual comment's translating indicator to cancel that item.
 
-This version translates one post or comment at a time, not an entire thread in one
-action. Linked article bodies, image OCR and video transcription are not included.
-Results are displayed as text; the model is instructed to preserve Markdown, code
-and URLs, but formatting fidelity is not guaranteed.
+Each comment includes bounded excerpts of the post title/body and up to three nearest
+ancestors, with author names and nearest-parent-first ordering. These are source-text
+excerpts, not previous model translations, to avoid propagating translation mistakes.
+Long source text is split at whitespace when possible, at most 1,000 Unicode code
+points per chunk; subsequent chunks receive a short preceding source excerpt. All
+chunks must succeed before a result is displayed. Context excerpts are explicitly
+marked when shortened. More context helps with ambiguity, but accuracy and Markdown
+fidelity are not guaranteed. Linked articles, image OCR and video transcription are
+not included.
+
+Translations are kept in an activity ViewModel, so recycled rows and rotation retain
+completed results. Leaving/replacing the comment listing stops its batch and suppresses
+late download callbacks. After rotation, restart the batch from the menu; completed
+matching results are reused. Closing the activity cancels its outstanding translations.
+Results are not persisted across app restarts or shared across separate activities.
+Replacing/removing the model invalidates result reuse. Inline views hide cached results
+when the original source text no longer matches.
 
 Local inference requires **64-bit Android 6.0+** (arm64-v8a or x86_64). The rest of
 RedReader keeps its original minimum Android version and 32-bit support. Actual RAM
@@ -31,18 +55,23 @@ requirements exceed the model file size and depend on the model and device.
 ## Architecture and model changes
 
 ```
-Post/comment action → TranslationDialog → TranslationService
+Post/comment action or thread queue → TranslationViewModel → TranslationService
                                          → TranslationProvider
                                            → GgufTranslationProvider
                                              → LlamaNative (JNI) → llama.cpp
 ```
 
-- `TranslationRequest` carries original text and a BCP 47 target language tag.
+- `TranslationRequest` carries original text, a BCP 47 target language tag and
+  supporting discussion context.
 - `TranslationProvider` owns model-specific prompting, supported languages and
   inference. Its blocking methods run on the service's background worker. It must
   honor cancellation and report failures rather than fabricate a translation.
 - `TranslationService` serializes requests and delivers results on the supplied
-  callback executor. Closing a dialog cancels its future and suppresses late UI updates.
+  callback executor. Cancelling an item suppresses late callbacks.
+- `TranslationViewModel` retains per-item state; `InlineTranslationView` observes
+  only while attached and rebinds to the correct item when rows are recycled.
+- `CommentListingFragment` serializes batch translation and additional reply requests,
+  deduplicating comment IDs and restoring the existing parent chain.
 - `GgufTranslationProvider` supplies the HY-MT2 translation prompt. The runtime uses
   the GGUF chat template and the model's tokenizer. A different model may need a
   different provider/prompt; importing an arbitrary GGUF does not guarantee suitability.
@@ -55,8 +84,8 @@ Post/comment action → TranslationDialog → TranslationService
 
 The initial backend uses CPU inference, an 8,192-token context, at most 4,096 output
 tokens, and up to four CPU threads. It reserves room for the output and rejects an
-oversized input explicitly. It does not silently truncate or switch to a cloud model.
-Native model, context and sampler memory are released after each request, including
+oversized chunk/context explicitly. It does not silently truncate or switch to a cloud model.
+Native model, context and sampler memory are released after each chunk, including
 failure and cancellation. This favors bounded memory use over repeated-load latency.
 No translation-result cache is persisted.
 
@@ -78,11 +107,13 @@ Device acceptance scenarios:
 - Import a valid model, translate a post with self-text and a nested comment,
   and verify original text, links and Reddit actions remain available.
 - Translate emoji/non-ASCII content and switch the target language.
-- Cancel while loading and while generating; dismiss/reopen and rotate the screen.
+- Cancel while loading and while generating; recycle/collapse rows and rotate the screen.
+- Translate an entire thread, load nested replies, stop/restart, and handle a download
+  failure without reporting the thread as complete.
 - Import a non-GGUF file, cancel the document picker, and interrupt an import;
   the previous complete model should remain usable.
-- Replace/remove the model and translate again. Try an oversized input and verify
-  an explicit failure instead of a truncated translation.
+- Replace/remove the model and translate again. Try a long input and verify
+  all chunks are translated; failures must not expose partial output as success.
 
 Reference: [Tencent model instructions](https://github.com/Tencent-Hunyuan/Hy-MT2),
 [llama.cpp Android documentation](https://github.com/ggml-org/llama.cpp/blob/master/docs/android.md).
@@ -97,6 +128,14 @@ Reference: [Tencent model instructions](https://github.com/Tencent-Hunyuan/Hy-MT
   translated into Chinese with its emoji preserved; cancellation during model
   loading raised `InterruptedIOException`. The example took approximately 53
   seconds on that emulator; this is not a physical-device performance estimate.
-- Full settings/import/menu interaction and physical-device memory/performance
-  still require device acceptance checks. The native scenario does not validate
-  those UI flows.
+- A temporary Android instrumentation scenario imported the real GGUF file and ran
+  the actual thread action on a local two-level comment fixture. Both comments were
+  translated inline through the production provider. The child received its parent
+  context and translated “He shot it yesterday. It came out sharp.” as
+  “他昨天拍了照片。照片很清晰。” in a photography discussion.
+- The device scenarios also checked inline rebinding, clearing a recycled untranslated
+  row, hiding a result after source edits, inline cancellation, model revision changes,
+  merging replies with canonical parents, and deduplicating repeated comment IDs.
+- Live Reddit pagination/network failures, the document picker, long-thread stress,
+  rotation, and physical-device memory/performance still need acceptance checks.
+  The local fixture does not establish completeness of Reddit's server responses.

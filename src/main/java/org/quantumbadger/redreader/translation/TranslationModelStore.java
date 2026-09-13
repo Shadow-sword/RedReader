@@ -33,6 +33,7 @@ public final class TranslationModelStore {
 	private final Context context;
 	private final File directory;
 	private final File model;
+	private volatile long revision;
 
 	TranslationModelStore(final Context context) {
 		this.context = context.getApplicationContext();
@@ -45,6 +46,10 @@ public final class TranslationModelStore {
 			throw new IOException("Import a translation model in Settings first");
 		}
 		return model;
+	}
+
+	public long getRevision() {
+		return revision;
 	}
 
 	public long getModelSize() {
@@ -90,6 +95,7 @@ public final class TranslationModelStore {
 				if(!temporary.renameTo(model)) {
 					throw new IOException("Could not replace the translation model");
 				}
+				revision++;
 			}
 		} finally {
 			if(temporary.exists() && !temporary.delete()) {
@@ -102,6 +108,7 @@ public final class TranslationModelStore {
 		if(model.exists() && !model.delete()) {
 			throw new IOException("Could not remove the translation model");
 		}
+		revision++;
 	}
 
 	private static void checkCancellation() throws InterruptedIOException {

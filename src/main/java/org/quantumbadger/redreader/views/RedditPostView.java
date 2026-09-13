@@ -17,6 +17,9 @@
 
 package org.quantumbadger.redreader.views;
 
+import org.quantumbadger.redreader.translation.RedditTranslation;
+import org.quantumbadger.redreader.translation.TranslationViewModel;
+
 import android.content.Context;
 import android.content.res.TypedArray;
 import android.graphics.Bitmap;
@@ -86,6 +89,7 @@ public final class RedditPostView extends FlingableItemView
 
 	private RedditPreparedPost mPost = null;
 	private final TextView title;
+	private final InlineTranslationView translatedTitle;
 	private final TextView subtitle;
 
 	@NonNull private final ImageView mThumbnailView;
@@ -242,6 +246,10 @@ public final class RedditPostView extends FlingableItemView
 				rootView.findViewById(R.id.reddit_post_overlay_icon));
 
 		title = Objects.requireNonNull(rootView.findViewById(R.id.reddit_post_title));
+		translatedTitle = new InlineTranslationView(context);
+		final LinearLayout titleParent = (LinearLayout)title.getParent();
+		titleParent.addView(translatedTitle, titleParent.indexOfChild(title) + 1);
+
 		subtitle = Objects.requireNonNull(rootView.findViewById(R.id.reddit_post_subtitle));
 
 		mCommentsButtonPref =
@@ -406,6 +414,8 @@ public final class RedditPostView extends FlingableItemView
 		newPost.bind(this);
 
 		mPost = newPost;
+		translatedTitle.bind(TranslationViewModel.get(mActivity).entry(
+				RedditTranslation.titleKey(newPost)), newPost.src.getTitle());
 
 		updateAppearance();
 	}
@@ -426,6 +436,8 @@ public final class RedditPostView extends FlingableItemView
 			title.setTextColor(rrPostTitleCol);
 		}
 
+		translatedTitle.setTextColor(title.getCurrentTextColor());
+		translatedTitle.setTextSize(TypedValue.COMPLEX_UNIT_PX, title.getTextSize());
 		title.setContentDescription(mPost.buildAccessibilityTitle(mActivity, false));
 
 		subtitle.setText(mPost.buildSubtitle(mActivity, false));

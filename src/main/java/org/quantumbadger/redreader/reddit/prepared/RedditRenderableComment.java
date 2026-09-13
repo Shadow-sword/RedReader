@@ -21,6 +21,10 @@ import android.content.Context;
 import android.graphics.Color;
 import android.text.SpannableStringBuilder;
 import android.view.View;
+import android.widget.LinearLayout;
+import org.quantumbadger.redreader.views.InlineTranslationView;
+import org.quantumbadger.redreader.translation.RedditTranslation;
+import org.quantumbadger.redreader.translation.TranslationViewModel;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -573,8 +577,18 @@ public class RedditRenderableComment
 			final Float textSize,
 			final boolean showLinkButtons) {
 
-		return mComment.getBody()
-				.generateView(activity, textColor, textSize, showLinkButtons);
+		final LinearLayout body = new LinearLayout(activity);
+		body.setOrientation(LinearLayout.VERTICAL);
+		body.addView(mComment.getBody()
+				.generateView(activity, textColor, textSize, showLinkButtons));
+		final InlineTranslationView translated = new InlineTranslationView(activity);
+		translated.setTextColor(textColor);
+		translated.setTextSize(textSize);
+		final RedditComment raw = mComment.getRawComment();
+		translated.bind(TranslationViewModel.get(activity).entry(RedditTranslation.commentKey(raw)),
+				raw.getBody() == null ? null : raw.getBody().getDecoded());
+		body.addView(translated);
+		return body;
 	}
 
 	@Override

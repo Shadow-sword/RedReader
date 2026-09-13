@@ -32,7 +32,8 @@ import androidx.appcompat.app.AppCompatActivity;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 
 import org.quantumbadger.redreader.R;
-import org.quantumbadger.redreader.fragments.TranslationDialog;
+import org.quantumbadger.redreader.translation.RedditTranslation;
+import org.quantumbadger.redreader.translation.TranslationViewModel;
 import org.quantumbadger.redreader.account.RedditAccount;
 import org.quantumbadger.redreader.account.RedditAccountManager;
 import org.quantumbadger.redreader.activities.CommentEditActivity;
@@ -323,8 +324,14 @@ public class RedditAPICommentAction {
 		switch(action) {
 
 			case TRANSLATE:
-				TranslationDialog.show(activity,
-						comment.getBody() == null ? null : comment.getBody().getDecoded());
+				if(comment.getBody() != null && !comment.getBody().getDecoded().trim().isEmpty()) {
+					TranslationViewModel.get(activity).translate(
+							RedditTranslation.commentKey(comment), comment.getBody().getDecoded(),
+							RedditTranslation.context(
+									commentListingFragment == null ? null
+											: commentListingFragment.getPost(),
+									commentView == null ? null : commentView.getComment()));
+				}
 				break;
 
 			case UPVOTE:

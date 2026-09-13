@@ -24,14 +24,18 @@ public final class TranslationRequest {
 
 	private final String text;
 	private final String targetLanguage;
+	private final String context;
 
 	/**
 	 * @param text Original text, including any Markdown, without a model prompt.
+	 * @param context Supporting discussion context, not text to translate.
 	 * @param targetLanguage BCP 47 language tag, for example zh-Hans or en.
 	 */
-	public TranslationRequest(final String text, final String targetLanguage) {
+	public TranslationRequest(
+			final String text, final String targetLanguage, final String context) {
 
 		this.text = Objects.requireNonNull(text);
+		this.context = Objects.requireNonNull(context);
 		this.targetLanguage = Objects.requireNonNull(targetLanguage);
 
 		if(text.trim().isEmpty()) {
@@ -40,6 +44,10 @@ public final class TranslationRequest {
 		if(targetLanguage.trim().isEmpty()) {
 			throw new IllegalArgumentException("Target language must not be empty");
 		}
+	}
+
+	public String getContext() {
+		return context;
 	}
 
 	public String getText() {

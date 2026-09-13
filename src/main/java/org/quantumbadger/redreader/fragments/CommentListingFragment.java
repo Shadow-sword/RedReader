@@ -36,6 +36,18 @@ import android.widget.FrameLayout;
 import android.widget.ImageButton;
 import android.widget.LinearLayout;
 import android.widget.TextView;
+import android.os.Handler;
+import android.os.Looper;
+import androidx.lifecycle.Observer;
+import java.util.HashSet;
+import java.util.HashMap;
+import java.util.Set;
+import org.quantumbadger.redreader.translation.LocalTranslation;
+import org.quantumbadger.redreader.reddit.kthings.RedditComment;
+import org.quantumbadger.redreader.reddit.url.PostCommentListingURL;
+import org.quantumbadger.redreader.translation.RedditTranslation;
+import org.quantumbadger.redreader.translation.TranslationViewModel;
+import org.quantumbadger.redreader.views.InlineTranslationView;
 
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.AppCompatActivity;
@@ -99,6 +111,20 @@ public class CommentListingFragment extends RRFragment
 	private final DownloadStrategy mDownloadStrategy;
 
 	private RedditPreparedPost mPost = null;
+	private final ArrayList<RedditCommentListItem> mTranslationItems = new ArrayList<>();
+	private final Set<String> mTranslatedComments = new HashSet<>();
+	private final Set<String> mTranslationUrls = new HashSet<>();
+	private final Handler mTranslationHandler = new Handler(Looper.getMainLooper());
+	private final TextView mTranslationStatus;
+	private boolean mTranslateThread;
+	private boolean mTranslationLoading;
+	private boolean mInitialCommentsFailed;
+	private int mTranslationGeneration;
+	private int mTranslationDone;
+	private int mTranslationFailed;
+	private TranslationViewModel.Entry mTranslationEntry;
+	private Observer<TranslationViewModel.Entry> mTranslationObserver;
+
 
 	private boolean mSelfTextVisible = true;
 
@@ -137,6 +163,14 @@ public class CommentListingFragment extends RRFragment
 		}
 
 		mCommentListingManager = new FilteredCommentListingManager(parent, searchString);
+		mTranslationStatus = new TextView(parent);
+		mTranslationStatus.setTextColor(new RRThemeAttributes(parent).rrMainTextCol);
+		final int translationPadding = General.dpToPixels(parent, 10);
+		mTranslationStatus.setPadding(translationPadding, translationPadding,
+				translationPadding, translationPadding);
+		mTranslationStatus.setVisibility(View.GONE);
+		mTranslationStatus.setOnClickListener(view -> stopThreadTranslation());
+		mCommentListingManager.addNotification(mTranslationStatus);
 		mAllUrls = urls;
 
 		mUrlsToDownload = new LinkedList<>(mAllUrls);
@@ -183,6 +217,15 @@ public class CommentListingFragment extends RRFragment
 				(LinearLayoutManager)mRecyclerView.getLayoutManager());
 
 		mRecyclerView.setAdapter(mCommentListingManager.getAdapter());
+		mRecyclerView.addOnAttachStateChangeListener(new View.OnAttachStateChangeListener() {
+			@Override
+			public void onViewAttachedToWindow(final View view) { }
+
+			@Override
+			public void onViewDetachedFromWindow(final View view) {
+				stopThreadTranslation();
+			}
+		});
 		mListingView = recyclerViewManager.getOuterView();
 
 		mRecyclerView.setItemAnimator(null);
@@ -449,6 +492,11 @@ public class CommentListingFragment extends RRFragment
 
 	@Override
 	public void onCommentListingRequestFailure(final RRError error) {
+		mInitialCommentsFailed = true;
+		if(mTranslateThread) {
+			stopThreadTranslation();
+			mTranslationStatus.setText(R.string.translation_thread_load_failed);
+		}
 		mCommentListingManager.setLoadingVisible(false);
 		mCommentListingManager.addFooterError(new ErrorView(getActivity(), error));
 	}
@@ -488,11 +536,20 @@ public class CommentListingFragment extends RRFragment
 			layoutManager.scrollToPositionWithOffset(0, 0);
 
 			if(post.src.getSelfText() != null) {
-				final View selfText = post.src.getSelfText().generateView(
+				final View originalSelfText = post.src.getSelfText().generateView(
 						activity,
 						attr.rrMainTextCol,
 						13f * mSelfTextFontScale,
 						mShowLinkButtons);
+				final LinearLayout selfText = new LinearLayout(activity);
+				selfText.setOrientation(LinearLayout.VERTICAL);
+				selfText.addView(originalSelfText);
+				final InlineTranslationView translated = new InlineTranslationView(activity);
+				translated.setTextColor(attr.rrMainTextCol);
+				translated.setTextSize(13f * mSelfTextFontScale);
+				translated.bind(TranslationViewModel.get(activity).entry(
+						RedditTranslation.bodyKey(post)), post.src.getRawSelfTextMarkdown());
+				selfText.addView(translated);
 				selfText.setFocusable(false);
 
 				if(selfText instanceof ViewGroup) {
@@ -598,6 +655,7 @@ public class CommentListingFragment extends RRFragment
 	public void onCommentListingRequestAllItemsDownloaded(
 			final ArrayList<RedditCommentListItem> items) {
 
+		mTranslationItems.addAll(items);
 		mCommentListingManager.addComments(items);
 
 		if(mFloatingToolbar != null && mFloatingToolbar.getVisibility() != View.VISIBLE) {
@@ -610,6 +668,9 @@ public class CommentListingFragment extends RRFragment
 		}
 
 		mUrlsToDownload.removeFirst();
+		if(mTranslateThread && mTranslationEntry == null) {
+			mTranslationHandler.post(this::nextThreadTranslation);
+		}
 
 		final LinearLayoutManager layoutManager
 				= (LinearLayoutManager)mRecyclerView.getLayoutManager();
@@ -658,6 +719,209 @@ public class CommentListingFragment extends RRFragment
 		}
 	}
 
+	private void startThreadTranslation() {
+		if(mInitialCommentsFailed) {
+			mTranslationStatus.setVisibility(View.VISIBLE);
+			mTranslationStatus.setText(R.string.translation_thread_load_failed);
+			return;
+		}
+		if(LocalTranslation.getInstance(getContext()).getModels().getModelSize() == 0) {
+			mTranslationStatus.setVisibility(View.VISIBLE);
+			mTranslationStatus.setText(R.string.translation_model_missing);
+			return;
+		}
+		mTranslateThread = true;
+		mTranslationLoading = false;
+		mTranslationGeneration++;
+		mTranslationDone = 0;
+		mTranslationFailed = 0;
+		mTranslatedComments.clear();
+		mTranslationUrls.clear();
+		getActivity().invalidateOptionsMenu();
+		nextThreadTranslation();
+	}
+
+	private void stopThreadTranslation() {
+		if(!mTranslateThread) {
+			return;
+		}
+		mTranslateThread = false;
+		mTranslationGeneration++;
+		mTranslationHandler.removeCallbacksAndMessages(null);
+		if(mTranslationEntry != null) {
+			mTranslationEntry.changes.removeObserver(mTranslationObserver);
+			TranslationViewModel.get(getActivity()).cancel(mTranslationEntry);
+			mTranslationEntry = null;
+		}
+		mTranslationStatus.setText(R.string.translation_cancelled);
+		getActivity().invalidateOptionsMenu();
+	}
+
+	private void nextThreadTranslation() {
+		if(!mTranslateThread || mTranslationEntry != null || mTranslationLoading) {
+			return;
+		}
+		mTranslationStatus.setVisibility(View.VISIBLE);
+		mTranslationStatus.setText(getActivity().getString(R.string.translation_thread_progress,
+				mTranslationDone, mTranslationFailed));
+		RedditCommentListItem next = null;
+		for(final RedditCommentListItem item : mTranslationItems) {
+			if(!item.isComment()) {
+				continue;
+			}
+			final RedditComment raw = item.asComment().getParsedComment().getRawComment();
+			final String key = RedditTranslation.commentKey(raw);
+			if(mTranslatedComments.add(key) && raw.getBody() != null
+					&& !raw.getBody().getDecoded().trim().isEmpty()
+					&& !"[deleted]".equals(raw.getBody().getDecoded())
+					&& !"[removed]".equals(raw.getBody().getDecoded())) {
+				next = item;
+				break;
+			}
+		}
+		if(next != null) {
+			final RedditComment raw = next.asComment().getParsedComment().getRawComment();
+			final String key = RedditTranslation.commentKey(raw);
+			mTranslationEntry = TranslationViewModel.get(getActivity()).translate(key,
+					raw.getBody().getDecoded(), RedditTranslation.context(mPost, next));
+			mTranslationObserver = entry -> {
+				if(!entry.busy) {
+					entry.changes.removeObserver(mTranslationObserver);
+					mTranslationEntry = null;
+					mTranslationDone++;
+					if(entry.error != null) {
+						mTranslationFailed++;
+					}
+					mTranslationHandler.post(this::nextThreadTranslation);
+				}
+			};
+			mTranslationEntry.changes.observeForever(mTranslationObserver);
+			return;
+		}
+		// Existing initial requests may still be delivering later pages.
+		if(!mUrlsToDownload.isEmpty()) {
+			return;
+		}
+		for(final RedditCommentListItem item : mTranslationItems) {
+			if(!item.isLoadMore()) {
+				continue;
+			}
+			for(final PostCommentListingURL url : item.asLoadMore().getMoreUrls(mAllUrls.get(0))) {
+				if(mTranslationUrls.add(url.generateJsonUri().toString())) {
+					loadTranslationComments(url);
+					return;
+				}
+			}
+		}
+		mTranslateThread = false;
+		mTranslationStatus.setText(getActivity().getString(R.string.translation_thread_complete,
+				mTranslationDone, mTranslationFailed));
+		getActivity().invalidateOptionsMenu();
+	}
+
+	private void loadTranslationComments(final PostCommentListingURL url) {
+		final int generation = mTranslationGeneration;
+		mTranslationLoading = true;
+		mTranslationStatus.setText(getActivity().getString(R.string.translation_thread_loading,
+				mTranslationDone));
+		new CommentListingRequest(getContext(), this, (BaseActivity)getActivity(),
+				mAllUrls.get(0), false, url, mUser, mSession, mDownloadStrategy,
+				new CommentListingRequest.Listener() {
+			@Override
+			public void onCommentListingRequestDownloadNecessary() { }
+
+			@Override
+			public void onCommentListingRequestCachedCopy(final TimestampUTC timestamp) { }
+
+			@Override
+			public void onCommentListingRequestParseStart() { }
+
+			@Override
+			public void onCommentListingRequestPostDownloaded(final RedditPreparedPost post) { }
+
+			@Override
+			public void onCommentListingRequestFailure(final RRError error) {
+				if(generation != mTranslationGeneration || !mTranslateThread) {
+					return;
+				}
+				stopThreadTranslation();
+				mTranslationStatus.setText(R.string.translation_thread_load_failed);
+				mCommentListingManager.addFooterError(new ErrorView(getActivity(), error));
+			}
+
+			@Override
+			public void onCommentListingRequestAllItemsDownloaded(
+					final ArrayList<RedditCommentListItem> items) {
+				if(generation != mTranslationGeneration || !mTranslateThread) {
+					return;
+				}
+				mTranslationLoading = false;
+				mergeTranslationComments(items);
+				mTranslationHandler.post(CommentListingFragment.this::nextThreadTranslation);
+			}
+		});
+	}
+
+	private void mergeTranslationComments(final ArrayList<RedditCommentListItem> items) {
+		final Map<String, RedditCommentListItem> known = new HashMap<>();
+		final Set<String> more = new HashSet<>();
+		for(final RedditCommentListItem item : mTranslationItems) {
+			if(item.isComment()) {
+				known.put(item.asComment().getIdAndType().toString(), item);
+			} else {
+				more.add(item.asLoadMore().toString());
+			}
+		}
+		for(final RedditCommentListItem item : items) {
+			final String parentId = item.isComment()
+					? item.asComment().getParsedComment().getRawComment().getParent_id()
+					: item.asLoadMore().getParent_id();
+			final RedditCommentListItem parent = known.get(parentId);
+			final RedditCommentListItem added;
+			if(item.isComment()) {
+				final String key = item.asComment().getIdAndType().toString();
+				if(known.containsKey(key)) {
+					continue;
+				}
+				added = new RedditCommentListItem(item.asComment(), parent, this,
+						(BaseActivity)getActivity(), mAllUrls.get(0));
+				known.put(key, added);
+			} else {
+				if(!more.add(item.asLoadMore().toString())) {
+					continue;
+				}
+				added = new RedditCommentListItem(item.asLoadMore(), parent, this,
+						(BaseActivity)getActivity(), mAllUrls.get(0));
+			}
+			int position = parent == null ? mTranslationItems.size()
+					: mTranslationItems.indexOf(parent) + 1;
+			while(parent != null && position < mTranslationItems.size()
+					&& mTranslationItems.get(position).getIndent() > parent.getIndent()) {
+				position++;
+			}
+			mTranslationItems.add(position, added);
+		}
+		final LinearLayoutManager layout = (LinearLayoutManager)mRecyclerView.getLayoutManager();
+		final int position = layout.findFirstVisibleItemPosition();
+		final View first = layout.findViewByPosition(position);
+		final int offset = first == null ? 0 : first.getTop();
+		final GroupedRecyclerViewAdapter.Item anchor = position < 0 ? null
+				: mCommentListingManager.getItemAtPosition(position);
+		mTranslationItems.removeIf(item -> item.isLoadMore()
+				&& !item.asLoadMore().getMoreUrls(mAllUrls.get(0)).isEmpty()
+				&& item.asLoadMore().getMoreUrls(mAllUrls.get(0)).stream().allMatch(url ->
+						mTranslationUrls.contains(url.generateJsonUri().toString())));
+		mCommentListingManager.replaceComments(mTranslationItems);
+		if(anchor != null) {
+			for(int i = 0; i < mCommentListingManager.getAdapter().getItemCount(); i++) {
+				if(mCommentListingManager.getItemAtPosition(i) == anchor) {
+					layout.scrollToPositionWithOffset(i, offset);
+					break;
+				}
+			}
+		}
+	}
+
 	@Override
 	public void onCreateOptionsMenu(final Menu menu) {
 
@@ -683,10 +947,26 @@ public class CommentListingFragment extends RRFragment
 
 			OptionsMenuUtility.pruneMenu(getActivity(), menu, appbarItemsPrefs, true);
 		}
+		if(mPost != null) {
+			menu.add(Menu.NONE, R.id.action_translate_thread, Menu.NONE,
+					mTranslateThread ? R.string.translation_cancel_thread
+							: R.string.translation_thread)
+					.setShowAsAction(MenuItem.SHOW_AS_ACTION_NEVER);
+		}
+
 	}
 
 	@Override
 	public boolean onOptionsItemSelected(final MenuItem item) {
+		if(item.getItemId() == R.id.action_translate_thread) {
+			if(mTranslateThread) {
+				stopThreadTranslation();
+			} else {
+				startThreadTranslation();
+			}
+			return true;
+		}
+
 
 		if(item.getTitle() != null
 				&& item.getTitle()
