@@ -32,7 +32,7 @@ import androidx.appcompat.widget.TooltipCompat
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import org.apache.commons.text.StringEscapeUtils
 import org.quantumbadger.redreader.R
-import org.quantumbadger.redreader.fragments.TranslationDialog
+import org.quantumbadger.redreader.translation.RedditTranslation
 import org.quantumbadger.redreader.account.RedditAccountManager
 import org.quantumbadger.redreader.activities.BaseActivity
 import org.quantumbadger.redreader.activities.BugReportActivity
@@ -352,11 +352,7 @@ object RedditPostActions {
 		action: Action
 	) {
 		when (action) {
-			Action.TRANSLATE -> TranslationDialog.show(
-				activity,
-				listOfNotNull(post.src.title, post.src.rawSelfTextMarkdown)
-					.filter { it.isNotBlank() }.joinToString("\n\n")
-			)
+			Action.TRANSLATE -> RedditTranslation.post(activity, post)
 			Action.UPVOTE -> action(post, activity, RedditAPI.ACTION_UPVOTE)
 			Action.DOWNVOTE -> action(post, activity, RedditAPI.ACTION_DOWNVOTE)
 			Action.UNVOTE -> action(post, activity, RedditAPI.ACTION_UNVOTE)

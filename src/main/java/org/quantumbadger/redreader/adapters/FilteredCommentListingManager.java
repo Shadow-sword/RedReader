@@ -49,6 +49,12 @@ public class FilteredCommentListingManager extends RedditListingManager {
 		mCommentCount += filteredComments.size();
 	}
 
+	public void replaceComments(final Collection<RedditCommentListItem> comments) {
+		final Collection<GroupedRecyclerViewAdapter.Item<?>> filtered = filter(comments);
+		replaceItems(filtered);
+		mCommentCount = filtered.size();
+	}
+
 	private Collection<GroupedRecyclerViewAdapter.Item<?>> filter(
 			final Collection<RedditCommentListItem> comments) {
 

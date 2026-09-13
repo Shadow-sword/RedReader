@@ -111,6 +111,12 @@ public abstract class RedditListingManager {
 		doWorkaround();
 	}
 
+	public void replaceItems(final Collection<GroupedRecyclerViewAdapter.Item<?>> items) {
+		General.checkThisIsUIThread();
+		mAdapter.removeAllFromGroup(GROUP_ITEMS);
+		mAdapter.appendToGroup(GROUP_ITEMS, items);
+	}
+
 	public void addViewToItems(final View view) {
 		General.checkThisIsUIThread();
 		mAdapter.appendToGroup(GROUP_ITEMS, new GroupedRecyclerViewItemFrameLayout(view));

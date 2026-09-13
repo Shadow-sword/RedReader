@@ -17,6 +17,9 @@
 
 package org.quantumbadger.redreader.views;
 
+import org.quantumbadger.redreader.translation.RedditTranslation;
+import org.quantumbadger.redreader.translation.TranslationViewModel;
+
 import android.content.res.TypedArray;
 import android.graphics.Color;
 import android.widget.ImageButton;
@@ -81,6 +84,12 @@ public class RedditPostHeaderView extends LinearLayout {
 		title.setContentDescription(post.buildAccessibilityTitle(activity, true));
 		title.setTextColor(Color.WHITE);
 		greyHeader.addView(title);
+		final InlineTranslationView translated = new InlineTranslationView(activity);
+		translated.setTextColor(Color.WHITE);
+		translated.setTextSize(19.0f * titleFontScale);
+		translated.bind(TranslationViewModel.get(activity).entry(
+				RedditTranslation.titleKey(post)), post.src.getTitle());
+		greyHeader.addView(translated);
 
 		final float subtitleFontScale =
 				PrefsUtility.appearance_fontscale_post_header_subtitles();
