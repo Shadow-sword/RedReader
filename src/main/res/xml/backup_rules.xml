@@ -19,5 +19,6 @@
 
 <full-backup-content>
 	<include domain="sharedpref" path="."/>
+	<exclude domain="sharedpref" path="translation_api.xml"/>
 	<include domain="database" path="accounts_oauth2.db"/>
 </full-backup-content>

@@ -50,6 +50,7 @@ public final class TranslationSettingsFragment extends PreferenceFragmentCompat 
 	public void onCreatePreferences(final Bundle savedInstanceState, final String rootKey) {
 		setPreferencesFromResource(R.xml.prefs_translation, rootKey);
 		model = new ViewModelProvider(this).get(ModelImportViewModel.class);
+		new TranslationApiPreferences(this).bind();
 
 		final Preference importModel = findPreference("translation_import");
 		importModel.setOnPreferenceClickListener(preference -> {

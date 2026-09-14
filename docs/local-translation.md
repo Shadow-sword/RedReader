@@ -1,14 +1,15 @@
 # Local post and comment translation
 
-The Android app runs inference in-process with llama.cpp. It does not send post or
-comment text to a translation server. The original Reddit data remains unchanged.
+In local mode, the Android app runs inference in-process with llama.cpp. This mode
+does not send post or comment text to a translation server. For remote services, see
+[API translation](api-translation.md). The original Reddit data remains unchanged.
 
 ## Using the feature
 
 1. Download the official [HY-MT2-1.8B Q4_K_M GGUF](https://huggingface.co/tencent/Hy-MT2-1.8B-GGUF/tree/main)
    to the device (approximately 1.13 GB). Use standard Q4_K_M, Q6_K or Q8_0 files;
    the specialized STQ 1.25-bit/2-bit variants are not supported by this integration.
-2. Open **Settings → Local translation → Import model** and choose the file.
+2. Open **Settings → Translation → Import model** and choose the file.
    The app copies it into private, non-backed-up storage. Keep enough free space
    for the downloaded file and its imported copy. Replacing a model temporarily
    requires room for both imported versions.
@@ -33,7 +34,7 @@ comment text to a translation server. The original Reddit data remains unchanged
 
 ### Concurrent translations
 
-**Settings → Local translation → Concurrent translations** offers 1–4 simultaneous
+**Settings → Translation → Concurrent translations** offers 1–4 simultaneous
 translations. The default is **1 (serial)**. The limit is shared across all individual
 post/comment requests and thread batches in the process. It changes without restarting
 the app; lowering it lets existing calls finish before the pool settles at the new
@@ -112,8 +113,8 @@ Post/comment action or thread queue → TranslationViewModel → TranslationServ
 - `GgufTranslationProvider` supplies the HY-MT2 translation prompt. The runtime uses
   the GGUF chat template and the model's tokenizer. A different model may need a
   different provider/prompt; importing an arbitrary GGUF does not guarantee suitability.
-- `LocalTranslation` is the single composition point for choosing a provider. A
-  future engine can implement the same interface without changing Reddit or UI code.
+- `LocalTranslation` is the single composition point for choosing a provider. It selects
+  the local GGUF engine or an API provider using the translation settings.
 - `TranslationModelStore` imports files through Android's document picker. Import
   checks GGUF magic/version; full model compatibility is checked during inference.
   Copy failure preserves the previous model. Inferences hold shared read locks;

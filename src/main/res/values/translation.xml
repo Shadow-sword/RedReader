@@ -3,18 +3,18 @@
 <resources>
 	<string name="action_translate">Translate</string>
 	<string name="prefs_category_translation_key" translatable="false">prefs_category_translation</string>
-	<string name="prefs_category_translation">Local translation</string>
+	<string name="prefs_category_translation">Translation</string>
 	<string name="translation_model">Translation model</string>
 	<string name="translation_import">Import model</string>
 	<string name="translation_import_description">Choose a HY-MT2 GGUF file (Q4_K_M recommended). Translation runs on this device and requires 64-bit Android 6.0 or later. The model is stored separately from the app.</string>
-	<string name="translation_model_missing">No model imported. Open Settings → Local translation to import one.</string>
+	<string name="translation_model_missing">No model imported. Open Settings → Translation to import one.</string>
 	<string name="translation_model_ready">Imported model: %1$s. Compatibility is checked when translating.</string>
 	<string name="translation_model_working">Updating translation model…</string>
 	<string name="translation_model_error">Could not update the model: %1$s</string>
 	<string name="translation_remove">Remove model</string>
 	<string name="translation_remove_confirm">Remove the imported model from this device?</string>
 	<string name="translation_target_language">Translate into</string>
-	<string name="translation_running">Translating on this device… Tap to cancel.</string>
+	<string name="translation_running">Translating… Tap to cancel.</string>
 	<string name="translation_failed">Could not translate: %1$s</string>
 	<string-array name="translation_languages" translatable="false">
 		<item>简体中文</item><item>繁體中文</item><item>English</item><item>日本語</item>
@@ -40,5 +40,47 @@
 	</string-array>
 	<string-array name="translation_concurrency_values" translatable="false">
 		<item>1</item><item>2</item><item>3</item><item>4</item>
+	</string-array>
+	<string name="translation_api_format">Translation method</string>
+	<string name="translation_api_settings">API settings</string>
+	<string name="translation_api_endpoint">API base URL</string>
+	<string name="translation_api_key">API key</string>
+	<string name="translation_api_access_token">OAuth access token</string>
+	<string name="translation_api_timeout">Request timeout (seconds)</string>
+	<string name="translation_api_model">Model ID</string>
+	<string name="translation_api_tokens">Maximum output tokens</string>
+	<string name="translation_api_token_field">Output limit parameter</string>
+	<string name="translation_api_organization">OpenAI organization (optional)</string>
+	<string name="translation_api_project">Project ID</string>
+	<string name="translation_api_version">Anthropic API version</string>
+	<string name="translation_api_location">Google Cloud location</string>
+	<string name="translation_api_region">Azure resource region</string>
+	<string name="translation_api_category">Azure category (optional)</string>
+	<string name="translation_api_formality">DeepL formality</string>
+	<string name="translation_api_not_set">Not configured</string>
+	<string name="translation_api_secret_saved">Saved on this device</string>
+	<string name="translation_api_privacy_title">Translation sends text to this service</string>
+	<string name="translation_api_privacy_context">Source text and discussion context, including author names, are sent to the configured service. Translating an entire thread may incur API charges. API settings and credentials are excluded from app backups.</string>
+	<string name="translation_api_privacy_text">Source text is sent to the configured service. This interface does not receive discussion context. Translating an entire thread may incur API charges. API settings and credentials are excluded from app backups.</string>
+	<string name="translation_api_endpoint_help">Include the API version path, for example https://api.openai.com/v1. The operation path is appended automatically. HTTPS only; no query parameters or credentials in the URL.</string>
+	<string name="translation_api_endpoint_exact">Enter the complete v2 endpoint, for example https://translation.googleapis.com/language/translate/v2. HTTPS only; no query parameters or credentials in the URL.</string>
+	<string name="translation_api_key_help">Enter the service API key. Leave empty only for Chat Completions or Responses endpoints that do not require authentication.</string>
+	<string name="translation_api_access_token_help">Google Advanced requires a valid OAuth access token, not an API key or service-account JSON. Replace the token when it expires; this app does not refresh it automatically.</string>
+	<string name="translation_api_model_help">Enter a model ID supported by your endpoint. For Gemini, omit the models/ prefix.</string>
+	<string name="translation_api_google_model_help">Optional full model resource, for example projects/PROJECT/locations/global/models/general/nmt. Leave empty to use the Google service default.</string>
+	<string name="translation_api_token_field_help">Use max_tokens for compatible services that support it, or max_completion_tokens for OpenAI models that require it. No automatic parameter substitution.</string>
+	<string name="translation_api_region_help">Enter the Azure resource region when required by your subscription, for example eastasia. Global single-service resources may leave it empty.</string>
+	<string name="translation_api_formality_help">Use default, more, less, prefer_more or prefer_less. Strict more/less requires a language and model supporting formality.</string>
+	<string name="translation_api_field_help">Use the value required by your service. Optional fields can be left empty.</string>
+	<string-array name="translation_api_formats">
+		<item>Local model (GGUF)</item>
+		<item>OpenAI Chat Completions (compatible)</item>
+		<item>OpenAI Responses</item>
+		<item>Anthropic Messages</item>
+		<item>Gemini generateContent</item>
+		<item>DeepL</item>
+		<item>Google Cloud Translation Basic v2</item>
+		<item>Google Cloud Translation Advanced v3</item>
+		<item>Azure Translator v3</item>
 	</string-array>
 </resources>

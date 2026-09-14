@@ -22,6 +22,7 @@ import android.app.Application;
 import androidx.annotation.NonNull;
 import androidx.lifecycle.AndroidViewModel;
 import androidx.lifecycle.MutableLiveData;
+import androidx.lifecycle.Observer;
 import androidx.lifecycle.ViewModelProvider;
 import androidx.appcompat.app.AppCompatActivity;
 import java.util.HashMap;
@@ -39,13 +40,23 @@ public final class TranslationViewModel extends AndroidViewModel {
 		public String error;
 		public boolean busy;
 		private Future<String> task;
-		private long modelRevision;
+		private String modelRevision;
 	}
 
 	private final Map<String, Entry> entries = new HashMap<>();
+	private final Observer<Long> configurationObserver = revision -> {
+		for(final Entry entry : entries.values()) {
+			cancel(entry);
+			entry.result = null;
+			entry.error = null;
+			entry.changes.setValue(entry);
+		}
+	};
 
 	public TranslationViewModel(@NonNull final Application app) {
 		super(app);
+		LocalTranslation.getInstance(app).getConfigurationChanges()
+				.observeForever(configurationObserver);
 	}
 
 	public static TranslationViewModel get(final AppCompatActivity activity) {
@@ -64,9 +75,8 @@ public final class TranslationViewModel extends AndroidViewModel {
 	public Entry translate(final String key, final String text, final String context) {
 		final Entry entry = entry(key);
 		final String language = LocalTranslation.getTargetLanguage(getApplication());
-		final long revision = LocalTranslation.getInstance(getApplication())
-				.getModels().getRevision();
-		if(revision == entry.modelRevision && text.equals(entry.text)
+		final String revision = LocalTranslation.getInstance(getApplication()).getRevision();
+		if(revision.equals(entry.modelRevision) && text.equals(entry.text)
 				&& language.equals(entry.language)
 				&& context.equals(entry.context) && (entry.busy || entry.result != null)) {
 			return entry;
@@ -113,6 +123,8 @@ public final class TranslationViewModel extends AndroidViewModel {
 
 	@Override
 	protected void onCleared() {
+		LocalTranslation.getInstance(getApplication()).getConfigurationChanges()
+				.removeObserver(configurationObserver);
 		for(final Entry entry : entries.values()) {
 			cancel(entry);
 		}

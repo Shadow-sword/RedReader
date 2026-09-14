@@ -38,7 +38,7 @@ public final class TranslationCache extends SQLiteOpenHelper {
 
 	private TranslationCache(final Context context) {
 		super(context, new File(context.getCacheDir(), "translations.db").getAbsolutePath(),
-				null, 1);
+				null, 2);
 	}
 
 	public static synchronized TranslationCache getInstance(final Context context) {
@@ -52,15 +52,20 @@ public final class TranslationCache extends SQLiteOpenHelper {
 	public void onCreate(final SQLiteDatabase database) {
 		database.execSQL("CREATE TABLE translations (cache_key TEXT NOT NULL, "
 				+ "language TEXT NOT NULL, context TEXT NOT NULL, source TEXT NOT NULL, "
-				+ "result TEXT NOT NULL, created_at INTEGER NOT NULL, "
-				+ "PRIMARY KEY (cache_key, language, context))");
+				+ "result TEXT NOT NULL, created_at INTEGER NOT NULL, namespace TEXT NOT NULL, "
+				+ "PRIMARY KEY (cache_key, language, context, namespace))");
 		database.execSQL("CREATE INDEX translations_created_at ON translations (created_at)");
 	}
 
 	@Override
 	public void onUpgrade(final SQLiteDatabase database, final int oldVersion,
 			final int newVersion) {
-		throw new IllegalStateException("Unsupported translation cache schema upgrade");
+		if(oldVersion != 1 || newVersion != 2) {
+			throw new IllegalStateException("Unsupported translation cache schema upgrade");
+		}
+		// Disposable cache: v1 results have no engine identity and must not cross providers.
+		database.execSQL("DROP TABLE translations");
+		onCreate(database);
 	}
 
 	@Override
@@ -70,10 +75,15 @@ public final class TranslationCache extends SQLiteOpenHelper {
 	}
 
 	String get(final TranslationRequest request) {
+		return get(request, "local");
+	}
+
+	String get(final TranslationRequest request, final String namespace) {
 		try(Cursor cursor = getReadableDatabase().query("translations", new String[]{"result"},
-				"cache_key = ? AND language = ? AND context = ? AND source = ? AND created_at > ?",
+				"cache_key = ? AND language = ? AND context = ? AND source = ? "
+						+ "AND namespace = ? AND created_at > ?",
 				new String[]{key(request.getText()), request.getTargetLanguage(),
-						request.getContext(), request.getText(),
+						request.getContext(), request.getText(), namespace,
 						Long.toString(System.currentTimeMillis() - MAX_AGE_MS)},
 				null, null, null)) {
 			return cursor.moveToFirst() ? cursor.getString(0) : null;
@@ -81,11 +91,16 @@ public final class TranslationCache extends SQLiteOpenHelper {
 	}
 
 	void put(final TranslationRequest request, final String result) {
+		put(request, result, "local");
+	}
+
+	void put(final TranslationRequest request, final String result, final String namespace) {
 		if(result == null || result.trim().isEmpty()) {
 			throw new IllegalArgumentException("Cannot cache an empty translation");
 		}
 		final ContentValues values = new ContentValues();
 		values.put("cache_key", key(request.getText()));
+		values.put("namespace", namespace);
 		values.put("language", request.getTargetLanguage());
 		values.put("context", request.getContext());
 		values.put("source", request.getText());

@@ -120,6 +120,7 @@ public class CommentListingFragment extends RRFragment
 	private boolean mTranslationLoading;
 	private boolean mInitialCommentsFailed;
 	private int mTranslationGeneration;
+	private String mTranslationRevision;
 	private int mTranslationDone;
 	private int mTranslationFailed;
 	private final Map<TranslationViewModel.Entry, Observer<TranslationViewModel.Entry>>
@@ -725,11 +726,14 @@ public class CommentListingFragment extends RRFragment
 			mTranslationStatus.setText(R.string.translation_thread_load_failed);
 			return;
 		}
-		if(LocalTranslation.getInstance(getContext()).getModels().getModelSize() == 0) {
+		final LocalTranslation translation = LocalTranslation.getInstance(getContext());
+		final String configurationError = translation.getConfigurationError();
+		if(configurationError != null) {
 			mTranslationStatus.setVisibility(View.VISIBLE);
-			mTranslationStatus.setText(R.string.translation_model_missing);
+			mTranslationStatus.setText(configurationError);
 			return;
 		}
+		mTranslationRevision = translation.getRevision();
 		mTranslateThread = true;
 		mTranslationLoading = false;
 		mTranslationGeneration++;
@@ -759,6 +763,10 @@ public class CommentListingFragment extends RRFragment
 	}
 
 	private void nextThreadTranslation() {
+		if(mTranslateThread && !LocalTranslation.getInstance(getContext()).getRevision()
+				.equals(mTranslationRevision)) {
+			stopThreadTranslation();
+		}
 		if(!mTranslateThread || mTranslationLoading) {
 			return;
 		}

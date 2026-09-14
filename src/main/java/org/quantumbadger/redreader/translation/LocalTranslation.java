@@ -17,12 +17,19 @@
 
 package org.quantumbadger.redreader.translation;
 
+import android.app.Application;
 import android.content.Context;
 import android.content.SharedPreferences;
 import android.os.Handler;
 import android.os.Looper;
 
+import org.quantumbadger.redreader.R;
+
 import androidx.preference.PreferenceManager;
+import androidx.lifecycle.LiveData;
+import androidx.lifecycle.MutableLiveData;
+
+import java.io.IOException;
 
 /** Process-wide inference limit shared by individual and thread translation. */
 public final class LocalTranslation {
@@ -30,30 +37,82 @@ public final class LocalTranslation {
 	private static LocalTranslation instance;
 
 	private final TranslationModelStore models;
-	private final TranslationService service;
+	private TranslationService service;
+	private final Application context;
+	private long configurationRevision;
+	private final MutableLiveData<Long> configurationChanges = new MutableLiveData<>();
+	// Keep a strong reference: SharedPreferences stores listeners weakly.
+	@SuppressWarnings("PMD.SingularField")
+	private final SharedPreferences.OnSharedPreferenceChangeListener apiPreferenceListener;
 	// SharedPreferences keeps only a weak reference to registered listeners.
 	@SuppressWarnings("PMD.SingularField")
 	private final SharedPreferences.OnSharedPreferenceChangeListener preferenceListener;
 
-	private LocalTranslation(final Context context) {
+	private LocalTranslation(final Application context) {
+		this.context = context;
 		models = new TranslationModelStore(context);
-		final Handler main = new Handler(Looper.getMainLooper());
 		final SharedPreferences preferences =
 				PreferenceManager.getDefaultSharedPreferences(context);
-		service = new TranslationService(new GgufTranslationProvider(models,
-				() -> Math.max(1, 4 / getConcurrency(context))),
-				main::post, getConcurrency(context));
+		service = createService();
+		apiPreferenceListener = (prefs, key) -> configurationChanged();
+		ApiTranslationConfig.preferences(context)
+				.registerOnSharedPreferenceChangeListener(apiPreferenceListener);
 		preferenceListener = (prefs, key) -> {
 			if("translation_concurrency".equals(key)) {
 				service.setConcurrency(getConcurrency(context));
+			} else if("translation_target_language".equals(key)
+					|| "pref_network_tor".equals(key)) {
+				configurationChanged();
 			}
 		};
 		preferences.registerOnSharedPreferenceChangeListener(preferenceListener);
 	}
 
+	private TranslationService createService() {
+		final ApiTranslationConfig config = ApiTranslationConfig.read(context);
+		final TranslationProvider provider = config.getFormat() == ApiTranslationConfig.Format.LOCAL
+				? new GgufTranslationProvider(models,
+						() -> Math.max(1, 4 / getConcurrency(context)))
+				: new ApiTranslationProvider(config, TranslationCache.getInstance(context),
+						PreferenceManager.getDefaultSharedPreferences(context)
+								.getBoolean("pref_network_tor", false));
+		return new TranslationService(provider, new Handler(Looper.getMainLooper())::post,
+				getConcurrency(context));
+	}
+
+	private void configurationChanged() {
+		service.close();
+		service = createService();
+		configurationRevision++;
+		configurationChanges.setValue(configurationRevision);
+	}
+
+	public LiveData<Long> getConfigurationChanges() {
+		return configurationChanges;
+	}
+
+	public String getRevision() {
+		return configurationRevision + ":" + models.getRevision();
+	}
+
+	public String getConfigurationError() {
+		final ApiTranslationConfig config = ApiTranslationConfig.read(context);
+		if(config.getFormat() == ApiTranslationConfig.Format.LOCAL) {
+			return models.getModelSize() == 0
+					? context.getString(R.string.translation_model_missing)
+					: null;
+		}
+		try {
+			config.validate();
+			return null;
+		} catch(final IOException error) {
+			return error.getMessage();
+		}
+	}
+
 	public static synchronized LocalTranslation getInstance(final Context context) {
 		if(instance == null) {
-			instance = new LocalTranslation(context.getApplicationContext());
+			instance = new LocalTranslation((Application)context.getApplicationContext());
 		}
 		return instance;
 	}

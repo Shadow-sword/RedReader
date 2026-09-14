@@ -2,6 +2,12 @@
 <!-- Part of RedReader, licensed under GPL-3.0-or-later. -->
 <PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android"
 	xmlns:app="http://schemas.android.com/apk/res-auto">
+	<ListPreference android:key="translation_format"
+		android:title="@string/translation_api_format"
+		android:persistent="false"
+		app:useSimpleSummaryProvider="true"/>
+	<PreferenceCategory android:key="translation_api_settings"
+		android:title="@string/translation_api_settings"/>
 	<Preference android:key="translation_status"
 		android:title="@string/translation_model"
 		android:summary="@string/translation_model_missing"

@@ -2,18 +2,18 @@
 <!-- Part of RedReader, licensed under GPL-3.0-or-later. -->
 <resources>
 	<string name="action_translate">翻译</string>
-	<string name="prefs_category_translation">本地翻译</string>
+	<string name="prefs_category_translation">翻译</string>
 	<string name="translation_model">翻译模型</string>
 	<string name="translation_import">导入模型</string>
 	<string name="translation_import_description">选择 HY-MT2 GGUF 文件（推荐 Q4_K_M）。翻译在本机运行，需要 64 位 Android 6.0 或更高版本。模型与应用分开保存。</string>
-	<string name="translation_model_missing">尚未导入模型。请打开“设置 → 本地翻译”导入。</string>
+	<string name="translation_model_missing">尚未导入模型。请打开“设置 → 翻译”导入。</string>
 	<string name="translation_model_ready">已导入模型：%1$s。首次翻译时检查模型兼容性。</string>
 	<string name="translation_model_working">正在更新翻译模型…</string>
 	<string name="translation_model_error">无法更新模型：%1$s</string>
 	<string name="translation_remove">移除模型</string>
 	<string name="translation_remove_confirm">移除保存在本机的翻译模型？</string>
 	<string name="translation_target_language">翻译为</string>
-	<string name="translation_running">正在本机翻译…点击取消。</string>
+	<string name="translation_running">正在翻译…点击取消。</string>
 	<string name="translation_failed">无法翻译：%1$s</string>
 	<string name="translation_inline">译文（%1$s）\n%2$s</string>
 	<string name="translation_thread">翻译整个评论区</string>
@@ -27,5 +27,47 @@
 	<string name="translation_concurrency_description">最多同时翻译：%s。提高并发会增加内存占用，未必更快。降低并发时，正在运行的任务会正常完成。</string>
 	<string-array name="translation_concurrency_choices">
 		<item>1（串行，默认）</item><item>2</item><item>3</item><item>4</item>
+	</string-array>
+	<string name="translation_api_format">翻译方式</string>
+	<string name="translation_api_settings">API 设置</string>
+	<string name="translation_api_endpoint">API 基础地址</string>
+	<string name="translation_api_key">API 密钥</string>
+	<string name="translation_api_access_token">OAuth 访问令牌</string>
+	<string name="translation_api_timeout">请求超时（秒）</string>
+	<string name="translation_api_model">模型 ID</string>
+	<string name="translation_api_tokens">最大输出 Token 数</string>
+	<string name="translation_api_token_field">输出上限参数</string>
+	<string name="translation_api_organization">OpenAI 组织（可选）</string>
+	<string name="translation_api_project">项目 ID</string>
+	<string name="translation_api_version">Anthropic API 版本</string>
+	<string name="translation_api_location">Google Cloud 区域</string>
+	<string name="translation_api_region">Azure 资源区域</string>
+	<string name="translation_api_category">Azure 自定义翻译类别（可选）</string>
+	<string name="translation_api_formality">DeepL 正式程度</string>
+	<string name="translation_api_not_set">尚未配置</string>
+	<string name="translation_api_secret_saved">已保存在本机</string>
+	<string name="translation_api_privacy_title">翻译会将文本发送到此服务</string>
+	<string name="translation_api_privacy_context">原文及讨论上下文（包括作者名）会发送到所配置的服务。翻译整个评论区可能产生 API 费用。API 配置和凭据不包含在应用备份中。</string>
+	<string name="translation_api_privacy_text">原文会发送到所配置的服务，此接口不接收讨论上下文。翻译整个评论区可能产生 API 费用。API 配置和凭据不包含在应用备份中。</string>
+	<string name="translation_api_endpoint_help">包含 API 版本路径，例如 https://api.openai.com/v1。操作路径会自动追加。仅支持 HTTPS，地址中不能包含查询参数或凭据。</string>
+	<string name="translation_api_endpoint_exact">填写完整的 v2 接口地址，例如 https://translation.googleapis.com/language/translate/v2。仅支持 HTTPS，地址中不能包含查询参数或凭据。</string>
+	<string name="translation_api_key_help">填写服务的 API 密钥。仅无需鉴权的 Chat Completions 或 Responses 服务可留空。</string>
+	<string name="translation_api_access_token_help">Google Advanced 需要有效的 OAuth 访问令牌，不是 API Key 或服务账号 JSON。令牌过期后需重新填写，应用不会自动刷新。</string>
+	<string name="translation_api_model_help">填写接口支持的模型 ID。Gemini 模型名不要包含 models/ 前缀。</string>
+	<string name="translation_api_google_model_help">可选的完整模型资源名，例如 projects/PROJECT/locations/global/models/general/nmt。留空使用 Google 服务默认模型。</string>
+	<string name="translation_api_token_field_help">支持传统参数的兼容服务使用 max_tokens；需要新参数的 OpenAI 模型使用 max_completion_tokens。应用不会自动替换参数。</string>
+	<string name="translation_api_region_help">按订阅要求填写 Azure 资源区域，例如 eastasia。全局单服务资源可留空。</string>
+	<string name="translation_api_formality_help">填写 default、more、less、prefer_more 或 prefer_less。严格的 more/less 要求语言和模型支持正式程度设置。</string>
+	<string name="translation_api_field_help">按服务要求填写，可选字段可以留空。</string>
+	<string-array name="translation_api_formats">
+		<item>本地模型（GGUF）</item>
+		<item>OpenAI Chat Completions（兼容接口）</item>
+		<item>OpenAI Responses</item>
+		<item>Anthropic Messages</item>
+		<item>Gemini generateContent</item>
+		<item>DeepL</item>
+		<item>Google Cloud Translation Basic v2</item>
+		<item>Google Cloud Translation Advanced v3</item>
+		<item>Azure Translator v3</item>
 	</string-array>
 </resources>

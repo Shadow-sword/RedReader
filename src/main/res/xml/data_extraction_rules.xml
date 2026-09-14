@@ -20,6 +20,10 @@
 <data-extraction-rules>
 	<cloud-backup disableIfNoEncryptionCapabilities="true">
 		<include domain="sharedpref" path="."/>
+		<exclude domain="sharedpref" path="translation_api.xml"/>
 		<include domain="database" path="accounts_oauth2.db"/>
-	</cloud-backup>>
+	</cloud-backup>
+	<device-transfer>
+		<exclude domain="sharedpref" path="translation_api.xml"/>
+	</device-transfer>
 </data-extraction-rules>
