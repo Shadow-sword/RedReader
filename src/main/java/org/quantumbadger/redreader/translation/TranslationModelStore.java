@@ -43,6 +43,10 @@ public final class TranslationModelStore {
 		model = new File(directory, "model.gguf");
 	}
 
+	TranslationCache getCache() {
+		return TranslationCache.getInstance(context);
+	}
+
 	File requireModel() throws IOException {
 		if(!model.isFile()) {
 			throw new IOException("Import a translation model in Settings first");
@@ -116,6 +120,8 @@ public final class TranslationModelStore {
 			acquire(modelLock.writeLock());
 			try {
 				checkCancellation();
+				// Invalidate under the exclusive lock before changing the model on disk.
+				getCache().clear();
 				if(!temporary.renameTo(model)) {
 					throw new IOException("Could not replace the translation model");
 				}
@@ -133,6 +139,7 @@ public final class TranslationModelStore {
 	public void removeModel() throws IOException {
 		acquire(modelLock.writeLock());
 		try {
+			getCache().clear();
 			if(model.exists() && !model.delete()) {
 				throw new IOException("Could not remove the translation model");
 			}

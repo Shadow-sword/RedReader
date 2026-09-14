@@ -23,6 +23,7 @@ import android.content.Intent;
 import android.util.Log;
 import org.quantumbadger.redreader.cache.CacheManager;
 import org.quantumbadger.redreader.reddit.prepared.RedditChangeDataManager;
+import org.quantumbadger.redreader.translation.TranslationCache;
 
 public class RegularCachePruner extends BroadcastReceiver {
 
@@ -31,11 +32,17 @@ public class RegularCachePruner extends BroadcastReceiver {
 
 		Log.i("RegularCachePruner", "Pruning cache...");
 
+		final PendingResult pendingResult = goAsync();
 		new Thread() {
 			@Override
 			public void run() {
-				RedditChangeDataManager.pruneAllUsersDefaultMaxAge();
-				CacheManager.getInstance(context).pruneCache();
+				try {
+					TranslationCache.getInstance(context).prune();
+					RedditChangeDataManager.pruneAllUsersDefaultMaxAge();
+					CacheManager.getInstance(context).pruneCache();
+				} finally {
+					pendingResult.finish();
+				}
 			}
 		}.start();
 	}

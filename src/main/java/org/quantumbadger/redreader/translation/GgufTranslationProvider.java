@@ -66,7 +66,22 @@ public final class GgufTranslationProvider implements TranslationProvider {
 		}
 		store.acquireForInference();
 		try {
-			return translateChunks(request, language, isCancelled, threadCount.getAsInt());
+			store.requireModel();
+			final TranslationCache cache = store.getCache();
+			final String cached = cache.get(request);
+			if(isCancelled.getAsBoolean()) {
+				throw new InterruptedIOException("Translation cancelled");
+			}
+			if(cached != null) {
+				return cached;
+			}
+			final String result = translateChunks(
+					request, language, isCancelled, threadCount.getAsInt());
+			if(isCancelled.getAsBoolean()) {
+				throw new InterruptedIOException("Translation cancelled");
+			}
+			cache.put(request, result);
+			return result;
 		} finally {
 			store.releaseAfterInference();
 		}

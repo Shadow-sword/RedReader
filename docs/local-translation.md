@@ -72,7 +72,14 @@ Translations are kept in an activity ViewModel, so recycled rows and rotation re
 completed results. Leaving/replacing the comment listing stops its batch and suppresses
 late download callbacks. After rotation, restart the batch from the menu; completed
 matching results are reused. Closing the activity cancels its outstanding translations.
-Results are not persisted across app restarts or shared across separate activities.
+Successful results are also persisted in a private SQLite cache across app restarts
+and activities. Cache keys concatenate the original UTF-8 text's MD5 and its first
+and last 8 bytes (hexadecimal, colon-separated; shorter text uses all its bytes).
+Target language and discussion context are matched separately, and the original text
+is checked on reads. Only complete, non-empty results are cached. Entries expire
+30 days after writing; hits do not extend their lifetime. The existing hourly cache
+pruner and database opening delete expired entries; reads also reject expired entries.
+Android may reclaim this cache to free storage.
 Replacing/removing the model invalidates result reuse. Inline views hide cached results
 when the original source text no longer matches.
 
@@ -118,7 +125,8 @@ tokens, and the CPU thread budget described above. It reserves room for the outp
 oversized chunk/context explicitly. It does not silently truncate or switch to a cloud model.
 Native model, context and sampler memory are released after each chunk, including
 failure and cancellation. This favors bounded memory use over repeated-load latency.
-No translation-result cache is persisted.
+Model replacement/removal clears the persistent result cache under the model write
+lock, before changing the model file, so old inferences cannot repopulate it afterward.
 
 ## Building and validation
 
@@ -138,6 +146,12 @@ Device acceptance scenarios:
 - Import a valid model, translate a post with self-text and a nested comment,
   and verify original text, links and Reddit actions remain available.
 - Translate emoji/non-ASCII content and switch the target language.
+- Translate the same input in another activity and after restarting the app; matching
+  language/context should reuse the result without inference. Change source, language
+  or context and verify a fresh translation. Include inputs shorter than 8 UTF-8 bytes.
+- Verify entries aged 30 days or more are not reused and are removed on database open
+  or the regular pruning broadcast, while newer entries remain. Cache hits must not
+  refresh the creation time. Failed or incomplete translations must not be cached.
 - Cancel while loading and while generating; recycle/collapse rows and rotate the screen.
 - Verify the default serial setting, two concurrent model readers, lowering the limit,
   cancelling active/queued tasks, and replacing/removing a model during inference.
