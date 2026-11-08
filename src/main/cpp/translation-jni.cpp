@@ -9,8 +9,10 @@
 #ifdef RR_TRANSLATION_SUPPORTED
 #include "llama.h"
 #include <algorithm>
+#include <dlfcn.h>
 #include <memory>
 #include <mutex>
+#include <sys/stat.h>
 #include <thread>
 #include <vector>
 
@@ -66,19 +68,77 @@ std::string bytes(JNIEnv *env, jbyteArray input) {
     return result;
 }
 
-std::string generate(const std::string &path, const std::string &prompt, Cancellation &cancel, int threadCount) {
-    static std::once_flag initialized;
-    std::call_once(initialized, [] { llama_backend_init(); });
-    cancel.check();
+// CPU backend variants are packaged next to this library.
+std::string libraryDirectory() {
+    Dl_info info{};
+    if (!dladdr(reinterpret_cast<void *>(&libraryDirectory), &info) || !info.dli_fname) {
+        throw std::runtime_error("Could not locate the translation runtime");
+    }
+    const std::string path(info.dli_fname);
+    const auto slash = path.rfind('/');
+    if (slash == std::string::npos) throw std::runtime_error("Could not locate the translation runtime");
+    return path.substr(0, slash);
+}
+
+// Loading (and repacking) the weights costs seconds, so reuse them across requests.
+struct LoadedModel {
+    std::string path;
+    dev_t device = 0;
+    ino_t inode = 0;
+    off_t size = 0;
+    timespec modified{};
+    std::shared_ptr<llama_model> model;
+};
+std::mutex modelMutex;
+LoadedModel loadedModel;
+
+std::shared_ptr<llama_model> acquireModel(const std::string &path, Cancellation &cancel) {
+    struct stat info{};
+    if (stat(path.c_str(), &info) != 0) throw std::runtime_error("Could not read the translation model");
+    std::lock_guard<std::mutex> lock(modelMutex);
+    // A re-imported model is a new file at the same path.
+    if (loadedModel.model && loadedModel.path == path && loadedModel.device == info.st_dev
+            && loadedModel.inode == info.st_ino && loadedModel.size == info.st_size
+            && loadedModel.modified.tv_sec == info.st_mtim.tv_sec
+            && loadedModel.modified.tv_nsec == info.st_mtim.tv_nsec) {
+        return loadedModel.model;
+    }
+    loadedModel = LoadedModel();
 
     auto modelParams = llama_model_default_params();
     modelParams.n_gpu_layers = 0;
     modelParams.progress_callback = Cancellation::progress;
     modelParams.progress_callback_user_data = &cancel;
-    using Model = std::unique_ptr<llama_model, decltype(&llama_model_free)>;
-    Model model(llama_model_load_from_file(path.c_str(), modelParams), llama_model_free);
+    std::shared_ptr<llama_model> model(
+            llama_model_load_from_file(path.c_str(), modelParams), llama_model_free);
     cancel.check();
     if (!model) throw std::runtime_error("Could not load this GGUF model");
+    loadedModel = {path, info.st_dev, info.st_ino, info.st_size, info.st_mtim, model};
+    return model;
+}
+
+void releaseModel() {
+    std::shared_ptr<llama_model> released;
+    {
+        std::lock_guard<std::mutex> lock(modelMutex);
+        released.swap(loadedModel.model);
+        loadedModel = LoadedModel();
+    }
+    // In-flight translations keep their reference; the last one frees the weights.
+}
+
+std::string generate(const std::string &path, const std::string &prompt, Cancellation &cancel, int threadCount) {
+    static std::once_flag initialized;
+    std::call_once(initialized, [] {
+        llama_backend_init();
+        ggml_backend_load_all_from_path(libraryDirectory().c_str());
+    });
+    if (ggml_backend_dev_count() == 0) {
+        throw std::runtime_error("Could not load the CPU inference backend");
+    }
+    cancel.check();
+
+    const std::shared_ptr<llama_model> model = acquireModel(path, cancel);
 
     const auto *vocab = llama_model_get_vocab(model.get());
     const char *tmpl = llama_model_chat_template(model.get(), nullptr);
@@ -190,4 +250,11 @@ Java_org_quantumbadger_redreader_translation_LlamaNative_generate(
 #endif
     if (!env->ExceptionCheck()) env->ThrowNew(env->FindClass(errorClass), error.c_str());
     return nullptr;
+}
+
+extern "C" JNIEXPORT void JNICALL
+Java_org_quantumbadger_redreader_translation_LlamaNative_release(JNIEnv *, jclass) {
+#ifdef RR_TRANSLATION_SUPPORTED
+    releaseModel();
+#endif
 }

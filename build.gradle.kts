@@ -101,6 +101,14 @@ android {
 	}
 
 	buildTypes {
+		getByName("debug") {
+			externalNativeBuild {
+				cmake {
+					// Unoptimised llama.cpp is ~40x slower, making local translation unusable.
+					arguments += "-DCMAKE_BUILD_TYPE=Release"
+				}
+			}
+		}
 		getByName("release") {
 			isMinifyEnabled = true
 			isShrinkResources = false

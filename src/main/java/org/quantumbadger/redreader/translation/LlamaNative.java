@@ -35,6 +35,9 @@ final class LlamaNative {
 			byte[] modelPath, byte[] prompt, Cancellation cancellation, int threads)
 			throws IOException;
 
+	/** Frees the cached model once in-flight generations finish. */
+	static native void release();
+
 	@Keep
 	static final class Cancellation {
 

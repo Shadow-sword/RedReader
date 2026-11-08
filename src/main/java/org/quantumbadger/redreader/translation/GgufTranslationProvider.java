@@ -22,15 +22,31 @@ import android.os.Build;
 import java.io.IOException;
 import java.io.InterruptedIOException;
 import java.nio.charset.StandardCharsets;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.TimeUnit;
 import java.util.function.BooleanSupplier;
 import java.util.function.IntSupplier;
 
 /** HY-MT2 prompt adapter backed by the embedded llama.cpp runtime. */
 public final class GgufTranslationProvider implements TranslationProvider {
 
+	// The native model stays loaded between requests, but not while translation is unused.
+	private static final long IDLE_RELEASE_SECONDS = 60;
+
 	private final TranslationModelStore store;
 	private volatile boolean closed;
 	private final IntSupplier threadCount;
+	private final ScheduledExecutorService releaser =
+			Executors.newSingleThreadScheduledExecutor(runnable -> {
+				final Thread thread = new Thread(runnable, "TranslationModelRelease");
+				thread.setDaemon(true);
+				return thread;
+			});
+	private int activeInferences;
+	private boolean nativeUsed;
+	private ScheduledFuture<?> pendingRelease;
 
 	public GgufTranslationProvider(
 			final TranslationModelStore store, final IntSupplier threadCount) {
@@ -75,8 +91,13 @@ public final class GgufTranslationProvider implements TranslationProvider {
 			if(cached != null) {
 				return cached;
 			}
-			final String result = translateChunks(
-					request, language, isCancelled, threadCount.getAsInt());
+			final String result;
+			beginInference();
+			try {
+				result = translateChunks(request, language, isCancelled, threadCount.getAsInt());
+			} finally {
+				endInference();
+			}
 			if(isCancelled.getAsBoolean()) {
 				throw new InterruptedIOException("Translation cancelled");
 			}
@@ -165,8 +186,31 @@ public final class GgufTranslationProvider implements TranslationProvider {
 		}
 	}
 
+	private synchronized void beginInference() {
+		activeInferences++;
+		nativeUsed = true;
+		if(pendingRelease != null) {
+			pendingRelease.cancel(false);
+			pendingRelease = null;
+		}
+	}
+
+	private synchronized void endInference() {
+		activeInferences--;
+		if(activeInferences == 0 && !closed) {
+			pendingRelease = releaser.schedule(
+					LlamaNative::release, IDLE_RELEASE_SECONDS, TimeUnit.SECONDS);
+		}
+	}
+
+	/** Called only after every inference has returned. */
 	@Override
-	public void close() {
+	public synchronized void close() {
 		closed = true;
+		releaser.shutdownNow();
+		// Avoid loading the native library on devices that never ran local inference.
+		if(nativeUsed) {
+			LlamaNative.release();
+		}
 	}
 }
