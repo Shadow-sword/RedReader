@@ -60,6 +60,11 @@ public class MoreCommentsListingActivity extends RefreshableActivity
 	}
 
 	@Override
+	protected boolean baseActivityContentExtendsBehindNavigationBar() {
+		return true;
+	}
+
+	@Override
 	public void onCreate(final Bundle savedInstanceState) {
 
 		PrefsUtility.applyTheme(this);

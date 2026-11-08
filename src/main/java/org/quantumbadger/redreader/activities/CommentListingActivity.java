@@ -274,6 +274,11 @@ public class CommentListingActivity extends RefreshableActivity
 	}
 
 	@Override
+	protected boolean baseActivityContentExtendsBehindNavigationBar() {
+		return true;
+	}
+
+	@Override
 	public OptionsMenuUtility.Sort getCommentSort() {
 		return controller.getSort();
 	}

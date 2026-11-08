@@ -655,6 +655,28 @@ public class RedditAPICommentAction {
 						if(action == RedditAPI.ACTION_DELETE) {
 							General.quickToast(context, R.string.delete_success);
 						}
+
+						if(!vote) {
+							return;
+						}
+
+						final int announcementRes;
+
+						switch(action) {
+							case RedditAPI.ACTION_UPVOTE:
+								announcementRes = R.string.accessibility_announcement_upvoted;
+								break;
+							case RedditAPI.ACTION_DOWNVOTE:
+								announcementRes = R.string.accessibility_announcement_downvoted;
+								break;
+							default:
+								announcementRes = R.string.accessibility_announcement_removed_vote;
+								break;
+						}
+
+						General.announceForAccessibility(
+								activity.getWindow().getDecorView(),
+								announcementRes);
 					}
 
 					private void revertOnFailure() {
@@ -676,6 +698,8 @@ public class RedditAPICommentAction {
 											TimestampUTC.now(),
 											comment.getIdAndType());
 								}
+								break;
+
 							case RedditAPI.ACTION_SAVE:
 								changeDataManager.markSaved(
 										TimestampUTC.now(),

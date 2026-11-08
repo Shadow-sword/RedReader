@@ -1144,6 +1144,17 @@ object RedditPostActions {
 
 						else -> throw java.lang.RuntimeException("Unknown post action")
 					}
+
+					if (vote) {
+						General.announceForAccessibility(
+							activity.window.decorView,
+							when (action) {
+								RedditAPI.ACTION_UPVOTE -> R.string.accessibility_announcement_upvoted
+								RedditAPI.ACTION_DOWNVOTE -> R.string.accessibility_announcement_downvoted
+								else -> R.string.accessibility_announcement_removed_vote
+							}
+						)
+					}
 				}
 
 				private fun revertOnFailure() {
@@ -1155,7 +1166,6 @@ object RedditPostActions {
 								0 -> changeDataManager.markUnvoted(now, post.src.idAndType)
 								1 -> changeDataManager.markUpvoted(now, post.src.idAndType)
 							}
-							changeDataManager.markSaved(now, post.src.idAndType, false)
 						}
 
 						RedditAPI.ACTION_SAVE -> changeDataManager.markSaved(now, post.src.idAndType, false)

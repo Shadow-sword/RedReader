@@ -241,6 +241,27 @@
         <item>primarydark</item>
     </string-array>
 
+	<string-array name="pref_appearance_navbar_opacity_options">
+		<item>@string/pref_appearance_navbar_opacity_option_auto</item>
+		<item>0%</item>
+		<item>25%</item>
+		<item>50%</item>
+		<item>75%</item>
+		<item>90%</item>
+		<item>100%</item>
+	</string-array>
+
+	<!-- Constants. Do not change. -->
+	<string-array name="pref_appearance_navbar_opacity_options_return">
+		<item>auto</item>
+		<item>0</item>
+		<item>25</item>
+		<item>50</item>
+		<item>75</item>
+		<item>90</item>
+		<item>100</item>
+	</string-array>
+
 	<string-array name="pref_appearance_theme">
 		<item>@string/theme_name_red</item>
 		<item>@string/theme_name_night</item>
@@ -904,6 +925,7 @@
 		<item>@string/pref_appearance_post_subtitle_items_spoiler</item>
 		<item>@string/pref_appearance_post_subtitle_items_nsfw</item>
 		<item>@string/pref_appearance_post_subtitle_items_crosspost</item>
+		<item>@string/pref_appearance_post_subtitle_items_locked</item>
 	</string-array>
 
 	<!-- Constants. Do not change. -->
@@ -921,6 +943,7 @@
 		<item>spoiler</item>
 		<item>nsfw</item>
 		<item>crosspost</item>
+		<item>locked</item>
 	</string-array>
 
 	<!-- Constants. Do not change. -->
@@ -936,6 +959,7 @@
 		<item>spoiler</item>
 		<item>nsfw</item>
 		<item>crosspost</item>
+		<item>locked</item>
 	</string-array>
 
 	<!-- 2020-02-05 -->

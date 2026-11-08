@@ -75,8 +75,10 @@ public class OAuthLoginActivity extends ViewsBaseActivity {
 	private @Nullable WebView createWebView() {
 		final WebView view = new WebView(this);
 
+		// Note: cookies are deliberately not cleared here. This method is also
+		// used to create popup windows partway through the login flow, and
+		// clearing at that point would discard the session. See onCreate().
 		final CookieManager cookieManager = CookieManager.getInstance();
-		cookieManager.removeAllCookies(null);
 		cookieManager.setAcceptCookie(true);
 		CookieManager.getInstance().setAcceptThirdPartyCookies(view, true);
 
@@ -229,7 +231,7 @@ public class OAuthLoginActivity extends ViewsBaseActivity {
 						+ ", error = "
 						+ errorResponse.getStatusCode());
 
-				if (request.getUrl().toString().equals("https://www.reddit.com/svc/shreddit/account/login")
+				if (request.getUrl().toString().startsWith("https://www.reddit.com/svc/shreddit/account/login")
 						&& errorResponse.getStatusCode() / 100 == 4) {
 					DialogUtils.showDialogPositiveNegative(
 							OAuthLoginActivity.this,
@@ -270,7 +272,15 @@ public class OAuthLoginActivity extends ViewsBaseActivity {
 		if (webView != null) {
 			webViewStack.add(webView);
 			setBaseActivityListing(webView);
-			webView.loadUrl(RedditOAuth.getPromptUri().toString());
+
+			// Clear any cookies left over from a previous session. The deletion
+			// is asynchronous, so only start the login flow once it has been
+			// applied, otherwise the first request could send stale cookies.
+			CookieManager.getInstance().removeAllCookies(cookiesRemoved -> {
+				if (!isDestroyed()) {
+					webView.loadUrl(RedditOAuth.getPromptUri().toString());
+				}
+			});
 		}
 	}
 

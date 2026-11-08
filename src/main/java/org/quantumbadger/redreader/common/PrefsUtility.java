@@ -136,6 +136,8 @@ public final class PrefsUtility {
 				|| key.equals(context.getString(R.string.pref_behaviour_fling_post_right_key))
 				|| key.equals(context.getString(R.string.pref_behaviour_nsfw_key))
 				|| key.equals(context.getString(R.string.pref_behaviour_postcount_key))
+				|| key.equals(context.getString(
+						R.string.pref_behaviour_mark_posts_as_read_on_scroll_key))
 				|| key.equals(context.getString(R.string.pref_behaviour_comment_min_key))
 				|| key.equals(context.getString(R.string.pref_behaviour_pinned_subredditsort_key))
 				|| key.equals(context.getString(
@@ -258,6 +260,27 @@ public final class PrefsUtility {
 		return AppearanceNavbarColour.valueOf(StringUtils.asciiUppercase(getString(
 				R.string.pref_appearance_navbar_color_key,
 				"black")));
+	}
+
+	/**
+	 * The opacity of the scrim drawn behind the navigation bar, as a
+	 * percentage from 0 to 100, or empty if it should be chosen automatically
+	 * based on the navigation bar colour.
+	 */
+	@NonNull
+	public static Optional<Integer> appearance_navbar_opacity() {
+
+		final String value = getString(R.string.pref_appearance_navbar_opacity_key, "auto");
+
+		if ("auto".equals(value)) {
+			return Optional.empty();
+		}
+
+		try {
+			return Optional.of(Math.max(0, Math.min(100, Integer.parseInt(value))));
+		} catch (final NumberFormatException e) {
+			return Optional.empty();
+		}
 	}
 
 	public static void applyTheme(@NonNull final Activity activity) {
@@ -573,6 +596,12 @@ public final class PrefsUtility {
 				true);
 	}
 
+	public static boolean pref_appearance_inbox_collapse_long_messages() {
+		return getBoolean(
+				R.string.pref_appearance_inbox_collapse_long_messages_key,
+				true);
+	}
+
 	public enum AppearanceStatusBarMode {
 		ALWAYS_HIDE, HIDE_ON_MEDIA, NEVER_HIDE
 	}
@@ -680,7 +709,8 @@ public final class PrefsUtility {
 		SPOILER,
 		NSFW,
 		UPVOTE_RATIO,
-		COMMENTS
+		COMMENTS,
+		LOCKED
 	}
 
 	public static EnumSet<AppearancePostSubtitleItem> appearance_post_subtitle_items() {
@@ -1258,6 +1288,12 @@ public final class PrefsUtility {
 		return getBoolean(
 				R.string.pref_behaviour_mark_posts_as_read_key,
 				true);
+	}
+
+	public static boolean pref_behaviour_mark_posts_as_read_on_scroll() {
+		return getBoolean(
+				R.string.pref_behaviour_mark_posts_as_read_on_scroll_key,
+				false);
 	}
 
 	public enum SharingDomain {

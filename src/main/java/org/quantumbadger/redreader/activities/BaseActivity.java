@@ -179,8 +179,9 @@ public abstract class BaseActivity extends AppCompatActivity
 	/**
 	 * Lays the window out edge-to-edge on all API levels, with transparent
 	 * system bars and light bar icons (matching the app's pre-edge-to-edge
-	 * appearance). Bar backgrounds are drawn by the app -- see
-	 * ViewsBaseActivity.
+	 * appearance). Bar backgrounds are drawn by the app (a translucent scrim
+	 * behind the 3-button navigation bar, and nothing behind the gesture
+	 * navigation handle) -- see ViewsBaseActivity.
 	 */
 	private void applyEdgeToEdge() {
 
@@ -300,8 +301,9 @@ public abstract class BaseActivity extends AppCompatActivity
 			return;
 		}
 
-		if (permissions.length != 1) {
-			throw new RuntimeException("Unexpected permission result");
+		if (grantResults.length == 0) {
+			// The request was interrupted: treat as cancelled
+			return;
 		}
 
 		if (grantResults[0] == PackageManager.PERMISSION_GRANTED) {
